@@ -16,11 +16,18 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+)
+
+const (
+	DefaultPort       = 8080
+	DefaultLogLevel   = "warn"
+	DefaultBaseFolder = "import"
 )
 
 type (
@@ -44,11 +51,10 @@ type (
 )
 
 var (
-	LogLevelValues = []string{"fatal", "error", "warn", "info", "debug", "trace", "debug"}
+	LogLevelValues = []string{"fatal", "error", "warn", "info", "debug", "trace"}
 )
 
 // LoadConfig loads TOML data into a Config struct
-
 func LoadConfig(data string) (*Config, error) {
 	c := &Config{}
 
@@ -57,52 +63,48 @@ func LoadConfig(data string) (*Config, error) {
 		return nil, err
 	}
 
-	err = toml.Unmarshal(content, &c)
-	if err != nil {
+	if err = toml.Unmarshal(content, &c); err != nil {
 		return nil, err
 	}
 
-	c.FillMissingData()
-
-	err = c.Validate()
-	if err != nil {
+	if err = c.Validate(); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
 // Validate validates that data in Config struct are filled in correctly
-
 func (config *Config) Validate() error {
+	if config.Planner == nil {
+		return errors.New("planner field is missing")
+	}
+	config.normalizeData()
 
 	if config.Supervisor.Port < 1024 || config.Supervisor.Port > 65535 {
-		return errors.New("Port number out of range")
+		return errors.New("port number must be in range 1024 - 65535")
 	}
 
-	err := containsString(LogLevelValues, config.Supervisor.LogLevel)
-	if err != nil {
-		return err
-	}
-
-	if config.Planner.BaseFolder != "import" {
-		return errors.New("Base Folder not filled in correctly")
+	if logLevelIsCorrect := containsString(LogLevelValues, config.Supervisor.LogLevel); !logLevelIsCorrect {
+		return fmt.Errorf("logLevel value '%s' invalid, must be one of '%s'",
+			config.Supervisor.LogLevel, strings.Join(LogLevelValues, ","))
 	}
 
 	if len(config.Planner.Kinds) == 0 {
-		return errors.New("No planner.kinds filled in")
+		return errors.New("planner.kinds array is missing")
 	}
 
 	uniqueNames := make(map[string]bool)
 	for _, kind := range config.Planner.Kinds {
 		if uniqueNames[kind.Name] {
-			return errors.New("Duplicate names in Planner Kinds")
+			return fmt.Errorf("duplicate name '%s' in planner.kinds", kind.Name)
 		}
 		uniqueNames[kind.Name] = true
 
 		uniqueFolderElements := make(map[string]bool)
 		for _, element := range kind.Folders {
 			if uniqueFolderElements[element] {
-				return errors.New("Duplicate elements in Folders array")
+				return fmt.Errorf(
+					"duplicate element '%s' in folders array in planner.kinds named '%s'", element, kind.Name)
 			}
 			uniqueFolderElements[element] = true
 		}
@@ -111,34 +113,30 @@ func (config *Config) Validate() error {
 	return nil
 }
 
-func containsString(arrayString []string, searchString string) error {
+func containsString(arrayString []string, searchString string) bool {
 	for _, s := range arrayString {
 		if s == searchString {
-			return nil
+			return true
 		}
 	}
 
-	return errors.New("Log level not filled in correctly")
+	return false
 }
 
-// FillMissingData fills in data that user didn't define
-
-func (config *Config) FillMissingData() error {
+func (config *Config) normalizeData() {
+	if config.Supervisor == nil {
+		config.Supervisor = &SupervisorConfig{}
+	}
 	if config.Supervisor.Port == 0 {
-		config.Supervisor.Port = 8080
+		config.Supervisor.Port = DefaultPort
 	}
 
 	if config.Supervisor.LogLevel == "" {
-		config.Supervisor.LogLevel = "debug"
-	} else {
-		config.Supervisor.LogLevel = strings.ToLower(config.Supervisor.LogLevel)
+		config.Supervisor.LogLevel = DefaultLogLevel
 	}
+	config.Supervisor.LogLevel = strings.ToLower(config.Supervisor.LogLevel)
 
 	if config.Planner.BaseFolder == "" {
-		config.Planner.BaseFolder = "import"
-	} else {
-		config.Planner.BaseFolder = strings.ToLower(config.Planner.BaseFolder)
+		config.Planner.BaseFolder = DefaultBaseFolder
 	}
-
-	return nil
 }

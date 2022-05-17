@@ -1,10 +1,9 @@
 [supervisor]
-port = 8080 # Nepovinne, v rozsahu 1024 - 65535, default je 8080
-log_level = 'debug' # Nepovinne, jeden z Fatal,Error,Warn,Info,Debug,Trace Defaultne debug
+port = 8080
+log_level = 'warn'
 
 [planner]
-base_folder = 'import' # Nepovinne, defaultne import
-
+base_folder = 'import'
 # [[planner.folders]]
 # name = 'data'
 # up_and_down = false

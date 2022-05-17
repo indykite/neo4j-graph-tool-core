@@ -36,17 +36,30 @@ linters-settings:
         tab-width: 4
     goimports:
         local-prefixes: github.com/indykite/neo4j-graph-tool-core
+    gosimple:
+        go: '1.17'
+        checks: [all]
     staticcheck:
         go: '1.17'
-        checks: [all, -ST1000]
+        checks: [all]
     stylecheck:
         go: '1.17'
-        checks: [all, -ST1000]
+        checks: [all, -ST1000] # STxxxx is stylistic issue
+    revive:
+        rules:
+            - name: early-return
+            - name: empty-block
+            - name: file-header
+              arguments:
+                  - Copyright \(c\) 202[0-9] IndyKite
+            - name: nested-structs
+            - name: redefines-builtin-id
+            - name: superfluous-else
+            - name: unnecessary-stmt
 issues:
     exclude-use-default: false # Some rules are excluded by GolangCI Linter by default, this one will prevent that
     max-issues-per-linter: 0
     max-same-issues: 0
-
     exclude-rules:
         - linters:
               - revive
