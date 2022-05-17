@@ -4,26 +4,15 @@ log_level = 'warn'
 
 [planner]
 base_folder = 'import'
-# [[planner.folders]]
-# name = 'data'
-# up_and_down = false
 
-# [[planner.folders]]
-# name = 'schema'
-# up_and_down = true
-
-# [[planner.folders]]
-# name = 'perf'
-# up_and_down = false
-
-[[planner.kinds]]
+[[planner.batches]]
 name = 'schema'
 folders = ['schema']
 
-[[planner.kinds]]
+[[planner.batches]]
 name = 'data'
 folders = ['schema', 'data']
 
-[[planner.kinds]]
+[[planner.batches]]
 name = 'performance'
 folders = ['schema', 'data', 'perf']

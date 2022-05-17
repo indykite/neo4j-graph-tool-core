@@ -63,4 +63,4 @@ issues:
     exclude-rules:
         - linters:
               - revive
-          text: exported .* should have comment .*or be unexported
+          text: exported (type|var|const).* should have comment .*or be unexported
