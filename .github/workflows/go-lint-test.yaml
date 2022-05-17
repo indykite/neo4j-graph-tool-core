@@ -1,0 +1,45 @@
+---
+name: Lint and test
+on: [push]
+
+concurrency:
+    group: pr-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    golangci:
+        name: Lint
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout codebase
+              uses: actions/checkout@v3
+
+            - name: Run GolangCI-Lint Scanner
+              uses: golangci/golangci-lint-action@v2
+              with:
+                  # Required: the version of golangci-lint is required and must be specified without patch version.
+                  version: v1.46
+
+                  # Optional: golangci-lint command line arguments.
+                  args: --timeout 2m00s
+
+    test:
+        name: Test and coverage
+        runs-on: ubuntu-latest
+        steps:
+            - name: Set up Go
+              uses: actions/setup-go@v3
+              with:
+                  go-version: ^1.18
+
+            - name: Check out code
+              uses: actions/checkout@v3
+
+            - name: Run Unit tests.
+              run: make test
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v3
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  files: ./coverage.out
