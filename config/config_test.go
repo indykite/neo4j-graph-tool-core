@@ -25,11 +25,12 @@ import (
 var _ = Describe("Load data errors", func() {
 	It("Invalid folder", func() {
 		_, err := config.LoadConfig("testdata/none")
-		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError(ContainSubstring("open testdata/none: no such file or directory")))
 	})
 	It("Not a folder", func() {
 		_, err := config.LoadConfig("config.go")
-		Expect(err).To(HaveOccurred())
+
+		Expect(err).To(MatchError(ContainSubstring("toml: line 1: expected '.' or '=', but got '/' instead")))
 	})
 })
 
@@ -39,11 +40,11 @@ var _ = Describe("Config", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":     Equal(8080),
-				"LogLevel": Equal("debug"),
+				"Port":     Equal(config.DefaultPort),
+				"LogLevel": Equal(config.DefaultLogLevel),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
-				"BaseFolder": Equal("import"),
+				"BaseFolder": Equal(config.DefaultBaseFolder),
 				"Kinds": ConsistOf(PointTo(MatchAllFields(Fields{
 					"Name":    Equal("schema"),
 					"Folders": ConsistOf("schema"),
@@ -67,11 +68,11 @@ var _ = Describe("Validation", func() {
 	BeforeEach(func() {
 		configStruct = &config.Config{
 			Supervisor: &config.SupervisorConfig{
-				Port:     8080,
-				LogLevel: "debug",
+				Port:     config.DefaultPort,
+				LogLevel: config.DefaultLogLevel,
 			},
 			Planner: &config.PlannerConfig{
-				BaseFolder: "import",
+				BaseFolder: config.DefaultBaseFolder,
 				Kinds: []*config.KindsConfig{
 					{
 						Name:    "schema",
@@ -99,30 +100,52 @@ var _ = Describe("Validation", func() {
 		configStruct.Supervisor.Port = 0
 		configStruct.Supervisor.LogLevel = ""
 		configStruct.Planner.BaseFolder = ""
-		configStruct.FillMissingData()
+		err := configStruct.Validate()
+		Expect(err).To(Succeed())
 		Expect(configStruct).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":     Equal(8080),
-				"LogLevel": Equal("debug"),
+				"Port":     Equal(config.DefaultPort),
+				"LogLevel": Equal(config.DefaultLogLevel),
 			})),
 			"Planner": PointTo(MatchFields(IgnoreExtras, Fields{
-				"BaseFolder": Equal("import"),
+				"BaseFolder": Equal(config.DefaultBaseFolder),
 			})),
 		})))
 
 	})
 	It("Case insensitive", func() {
 		configStruct.Supervisor.LogLevel = "fAtAL"
-		configStruct.Planner.BaseFolder = "ImPOrt"
-		configStruct.FillMissingData()
-		Expect(configStruct).To(PointTo(MatchAllFields(Fields{
+		err := configStruct.Validate()
+		Expect(err).To(Succeed())
+		Expect(configStruct).To(PointTo(MatchFields(IgnoreExtras, Fields{
 			"Supervisor": PointTo(MatchFields(IgnoreExtras, Fields{
 				"LogLevel": Equal("fatal"),
 			})),
+		})))
+	})
+	It("Base Folder", func() {
+		configStruct.Planner.BaseFolder = ""
+		err := configStruct.Validate()
+		Expect(err).To(Succeed())
+		Expect(configStruct).To(PointTo(MatchFields(IgnoreExtras, Fields{
 			"Planner": PointTo(MatchFields(IgnoreExtras, Fields{
-				"BaseFolder": Equal("import"),
+				"BaseFolder": Equal(config.DefaultBaseFolder),
 			})),
 		})))
+
+	})
+
+	It("ConfigStruct.Supervisor is nil", func() {
+		configStruct.Supervisor = nil
+		err := configStruct.Validate()
+		Expect(err).To(Succeed())
+		Expect(configStruct).To(PointTo(MatchFields(IgnoreExtras, Fields{
+			"Supervisor": PointTo(MatchAllFields(Fields{
+				"Port":     Equal(config.DefaultPort),
+				"LogLevel": Equal(config.DefaultLogLevel),
+			})),
+		})))
+
 	})
 })
 
@@ -158,35 +181,36 @@ var _ = Describe("Error tests", func() {
 	It("Port Number", func() {
 		configStruct.Supervisor.Port = 1000
 		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("Port number out of range")))
+		Expect(err).To(MatchError(MatchRegexp("port number must be in range 1024 - 65535")))
 
 	})
 	It("Log Level", func() {
 		configStruct.Supervisor.LogLevel = "debugfatal"
 		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("Log level not filled in correctly")))
-
-	})
-	It("Base Folder", func() {
-		configStruct.Planner.BaseFolder = "imp"
-		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("Base Folder not filled in correctly")))
+		Expect(err).To(MatchError(MatchRegexp(
+			"logLevel value 'debugfatal' invalid, must be one of 'fatal,error,warn,info,debug,trace'")))
 
 	})
 	It("Planner kinds missing", func() {
 		configStruct.Planner.Kinds = []*config.KindsConfig{}
 		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("No planner.kinds filled in")))
+		Expect(err).To(MatchError(MatchRegexp("planner.kinds array is missing")))
 	})
 	It("Duplicate Names", func() {
 		configStruct.Planner.Kinds[0].Name = configStruct.Planner.Kinds[1].Name
 		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("Duplicate names in Planner.Kinds")))
+		Expect(err).To(MatchError(MatchRegexp("duplicate name 'data' in planner.kinds")))
 	})
 	It("Duplicate elements of Folders", func() {
 		configStruct.Planner.Kinds[1].Folders = []string{"schema", "schema", "data"}
 		err := configStruct.Validate()
-		Expect(err).To(MatchError(MatchRegexp("Duplicate elements in Folders array")))
+		Expect(err).To(MatchError(MatchRegexp(
+			"duplicate element 'schema' in folders array in planner.kinds named 'data'")))
+	})
+	It("Config.Planner is nil", func() {
+		configStruct.Planner = nil
+		err := configStruct.Validate()
+		Expect(err).To(MatchError(MatchRegexp("planner field is missing")))
 	})
 
 })
