@@ -1,4 +1,3 @@
-//module github.com/indykite/neo4j-test
 module github.com/indykite/neo4j-graph-tool-core
 
 go 1.17

@@ -32,19 +32,19 @@ const (
 
 type (
 	Config struct {
-		Supervisor *SupervisorConfig `toml:"supervisor"`
-		Planner    *PlannerConfig    `toml:"planner"`
+		Supervisor *Supervisor `toml:"supervisor"`
+		Planner    *Planner    `toml:"planner"`
 	}
 
-	SupervisorConfig struct {
+	Supervisor struct {
 		Port     int    `toml:"port"`
 		LogLevel string `toml:"log_level"`
 	}
-	PlannerConfig struct {
-		BaseFolder string         `toml:"base_folder"`
-		Kinds      []*KindsConfig `toml:"kinds"`
+	Planner struct {
+		BaseFolder string   `toml:"base_folder"`
+		Batches    []*Batch `toml:"batches"`
 	}
-	KindsConfig struct {
+	Batch struct {
 		Name    string   `toml:"name"`
 		Folders []string `toml:"folders"`
 	}
@@ -89,22 +89,22 @@ func (config *Config) Validate() error {
 			config.Supervisor.LogLevel, strings.Join(LogLevelValues, ","))
 	}
 
-	if len(config.Planner.Kinds) == 0 {
-		return errors.New("planner.kinds array is missing")
+	if len(config.Planner.Batches) == 0 {
+		return errors.New("planner.batches array is missing")
 	}
 
 	uniqueNames := make(map[string]bool)
-	for _, kind := range config.Planner.Kinds {
-		if uniqueNames[kind.Name] {
-			return fmt.Errorf("duplicate name '%s' in planner.kinds", kind.Name)
+	for _, batch := range config.Planner.Batches {
+		if uniqueNames[batch.Name] {
+			return fmt.Errorf("duplicate name '%s' in planner.batches", batch.Name)
 		}
-		uniqueNames[kind.Name] = true
+		uniqueNames[batch.Name] = true
 
 		uniqueFolderElements := make(map[string]bool)
-		for _, element := range kind.Folders {
+		for _, element := range batch.Folders {
 			if uniqueFolderElements[element] {
 				return fmt.Errorf(
-					"duplicate element '%s' in folders array in planner.kinds named '%s'", element, kind.Name)
+					"duplicate element '%s' in folders array in planner.batch named '%s'", element, batch.Name)
 			}
 			uniqueFolderElements[element] = true
 		}
@@ -125,7 +125,7 @@ func containsString(arrayString []string, searchString string) bool {
 
 func (config *Config) normalizeData() {
 	if config.Supervisor == nil {
-		config.Supervisor = &SupervisorConfig{}
+		config.Supervisor = &Supervisor{}
 	}
 	if config.Supervisor.Port == 0 {
 		config.Supervisor.Port = DefaultPort
