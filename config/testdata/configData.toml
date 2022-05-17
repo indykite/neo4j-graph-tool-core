@@ -1,0 +1,30 @@
+[supervisor]
+port = 8080 # Nepovinne, v rozsahu 1024 - 65535, default je 8080
+log_level = 'debug' # Nepovinne, jeden z Fatal,Error,Warn,Info,Debug,Trace Defaultne debug
+
+[planner]
+base_folder = 'import' # Nepovinne, defaultne import
+
+# [[planner.folders]]
+# name = 'data'
+# up_and_down = false
+
+# [[planner.folders]]
+# name = 'schema'
+# up_and_down = true
+
+# [[planner.folders]]
+# name = 'perf'
+# up_and_down = false
+
+[[planner.kinds]]
+name = 'schema'
+folders = ['schema']
+
+[[planner.kinds]]
+name = 'data'
+folders = ['schema', 'data']
+
+[[planner.kinds]]
+name = 'performance'
+folders = ['schema', 'data', 'perf']
