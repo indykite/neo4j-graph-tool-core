@@ -4,15 +4,17 @@ log_level = 'warn'
 
 [planner]
 base_folder = 'import'
+drop_cypher_file = 'drop.cypher'
 
-[[planner.batches]]
-name = 'schema'
-folders = ['schema']
+[planner.schema_folder]
+folder_name = 'schema'
+migration_type = 'up_down'
+node_labels = ['GraphToolMigration', "SchemaVersion"]
 
-[[planner.batches]]
-name = 'data'
-folders = ['schema', 'data']
+[planner.folders]
+data = {migration_type = 'change', node_labels = ['DataVersion']}
+perf = {migration_type = 'change', node_labels = ['PerfVersion']}
 
-[[planner.batches]]
-name = 'performance'
-folders = ['schema', 'data', 'perf']
+[planner.batches]
+data = { folders = ['data'] }
+performance = { folders = ['data', 'perf'] }
