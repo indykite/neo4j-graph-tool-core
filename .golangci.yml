@@ -17,7 +17,7 @@ linters:
         # Extra
         - lll
         - asciicheck
-        - cyclop
+        #- cyclop # Will be nice to return this back
         - gocritic
         - revive
         - gosec
@@ -46,12 +46,36 @@ linters-settings:
         go: '1.17'
         checks: [all, -ST1000] # STxxxx is stylistic issue
     revive:
+        # When listed some additional rules, it overrides defaults as well.
+        # Put manually all default ones from https://github.com/mgechev/revive/blob/master/defaults.toml
         rules:
+            # Default ones
+            - name: blank-imports
+            - name: context-as-argument
+            - name: context-keys-type
+            - name: dot-imports
+            - name: error-return
+            - name: error-strings
+            - name: error-naming
+            - name: exported
+            - name: if-return
+            - name: increment-decrement
+            - name: var-naming
+            - name: var-declaration
+            - name: package-comments
+            - name: range
+            - name: receiver-naming
+            - name: time-naming
+            - name: unexported-return
+            - name: indent-error-flow
+            - name: errorf
+
+            # Extra ones
             - name: early-return
             - name: empty-block
             - name: file-header
-              arguments:
-                  - Copyright \(c\) 202[0-9] IndyKite
+              arguments: # Arguments must be valid regex, don't forget to escape ( and )
+                  - Copyright \(c\) 2022 IndyKite
             - name: nested-structs
             - name: redefines-builtin-id
             - name: superfluous-else
@@ -64,3 +88,6 @@ issues:
         - linters:
               - revive
           text: exported (type|var|const).* should have comment .*or be unexported
+        # Remove this during planner and supervisor refactor
+        - path: planner|supervisor
+          text: exported .* should have comment .*or be unexported

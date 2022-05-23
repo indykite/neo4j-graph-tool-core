@@ -1,0 +1,10 @@
+// Just a comment
+# Another comment type
+
+
+graph-tool abc -n 456
+graph-tool jkl
+exit
+
+// The rest is ignored
+graph-tool xyz

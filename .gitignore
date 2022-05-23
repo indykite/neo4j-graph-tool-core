@@ -11,11 +11,6 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# Possible binaries
-neo4j-test
-supervisor
-cli
-
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .idea
