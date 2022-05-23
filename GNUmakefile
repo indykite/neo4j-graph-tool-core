@@ -2,7 +2,7 @@
 
 goimports:
 	@echo "==> Fixing imports code with goimports"
-	goimports -local "github.com/indykite/neo4j-graph-tool-core" -w ./...
+	goimports -local "github.com/indykite/neo4j-graph-tool-core" -w -srcdir . .
 
 test:
 	go test -v -cpu 4 -covermode=count -coverpkg github.com/indykite/neo4j-graph-tool-core/... -coverprofile=coverage.out ./...
