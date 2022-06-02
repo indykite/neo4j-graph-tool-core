@@ -119,20 +119,31 @@ func LoadFile(fileName string) (*Config, error) {
 	return c, nil
 }
 
-// Validate validates that data in Config struct are filled in correctly
+// Validate validates that data in Config struct are filled in correctly.
+// Supervisor is not required, but if it is present, is validate.
 func (c *Config) Validate() error {
-	if err := c.validateStructure(); err != nil {
+	if err := c.validateStructure(false); err != nil {
 		return err
 	}
 
 	return c.validateValues()
 }
 
-func (c *Config) validateStructure() error {
+// ValidateWithSupervisor validates that data in Config struct are filled in correctly with mandatory supervisor part.
+// This is like Validate() but if Supervisor is missing, error will be thrown
+func (c *Config) ValidateWithSupervisor() error {
+	if err := c.validateStructure(true); err != nil {
+		return err
+	}
+
+	return c.validateValues()
+}
+
+func (c *Config) validateStructure(requiredSupervisor bool) error {
 	if c == nil {
 		return errors.New("missing config")
 	}
-	if c.Supervisor == nil {
+	if requiredSupervisor && c.Supervisor == nil {
 		return errors.New("missing config.Supervisor")
 	}
 	if c.Planner == nil {
@@ -145,14 +156,20 @@ func (c *Config) validateStructure() error {
 }
 
 func (c *Config) validateValues() error {
-	if err := c.validateRequiredParts(); err != nil {
+	if err := c.validateSupervisor(); err != nil {
+		return err
+	}
+	if err := c.validatePlanner(); err != nil {
 		return err
 	}
 	return c.validateFoldersAndBatches()
 }
 
-func (c *Config) validateRequiredParts() error {
-	// Supervisor part
+func (c *Config) validateSupervisor() error {
+	if c.Supervisor == nil {
+		return nil
+	}
+
 	if c.Supervisor.Port < 1024 || c.Supervisor.Port > 65535 {
 		return errors.New("port number must be in range 1024 - 65535")
 	}
@@ -162,7 +179,10 @@ func (c *Config) validateRequiredParts() error {
 			c.Supervisor.LogLevel, strings.Join(logLevelValues, ","))
 	}
 
-	// Planner part
+	return nil
+}
+
+func (c *Config) validatePlanner() error {
 	if c.Planner.BaseFolder == "" {
 		return errors.New("base_folder cannot be empty")
 	}
@@ -254,7 +274,8 @@ func stringInArray(arrayString []string, searchString string) bool {
 // It first calls Validate() to be sure all required structures are in place. This is only case,
 // when function might return error. If you called Validate before, you are free to ignore this error.
 func (c *Config) Normalize() error {
-	if err := c.validateStructure(); err != nil {
+	// Normalize is not setting anything for Supervisor part, so that part might be nil
+	if err := c.validateStructure(false); err != nil {
 		return err
 	}
 
