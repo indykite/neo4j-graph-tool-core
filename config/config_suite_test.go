@@ -15,6 +15,7 @@
 package config_test
 
 import (
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -24,4 +25,26 @@ import (
 func TestConfig(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Config Suite")
+}
+
+func envSetter(envs map[string]string) (closer func()) {
+	originalEnvs := map[string]string{}
+
+	for name, value := range envs {
+		if originalValue, ok := os.LookupEnv(name); ok {
+			originalEnvs[name] = originalValue
+		}
+		_ = os.Setenv(name, value)
+	}
+
+	return func() {
+		for name := range envs {
+			origValue, has := originalEnvs[name]
+			if has {
+				_ = os.Setenv(name, origValue)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}
+	}
 }

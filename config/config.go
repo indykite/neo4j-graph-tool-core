@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Masterminds/semver"
 	"github.com/spf13/viper"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -34,6 +35,7 @@ const (
 	DefaultNodeLabel           = "GraphToolMigration"
 	DefaultNodeSubString       = "Version"
 	DefaultFolderMigrationType = "change"
+	DefaultInitialBatch        = "schema"
 )
 
 type (
@@ -43,8 +45,11 @@ type (
 	}
 
 	Supervisor struct {
-		Port     int    `mapstructure:"port"`
-		LogLevel string `mapstructure:"log_level"`
+		Port         int    `mapstructure:"port"`
+		LogLevel     string `mapstructure:"log_level"`
+		GraphVersion string `mapstructure:"graph_version"`
+		InitialBatch string `mapstructure:"initial_batch"`
+		Neo4jAuth    string `mapstructure:"neo4j_auth"`
 	}
 
 	Planner struct {
@@ -95,13 +100,20 @@ func LoadFile(fileName string) (*Config, error) {
 		}
 	}
 
-	v.SetDefault("supervisor", &Supervisor{})
 	v.SetDefault("supervisor.port", DefaultPort)
 	v.SetDefault("supervisor.log_level", DefaultLogLevel)
+	v.SetDefault("supervisor.initial_batch", DefaultInitialBatch)
 	v.SetDefault("planner.drop_cypher_file", DefaultDropCypherFile)
 	v.SetDefault("planner.base_folder", DefaultBaseFolder)
 	v.SetDefault("planner.schema_folder.folder_name", DefaultSchemaFolderName)
 	v.SetDefault("planner.schema_folder.migration_type", DefaultSchemaMigrationType)
+
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.SetEnvPrefix("GT")
+	_ = v.BindEnv("supervisor.initial_batch", "GRAPH_MODEL_KIND")
+	_ = v.BindEnv("supervisor.graph_version", "GRAPH_MODEL_VERSION")
+	_ = v.BindEnv("supervisor.neo4j_auth", "NEO4J_AUTH")
 
 	c := &Config{}
 
@@ -152,6 +164,7 @@ func (c *Config) validateStructure(requiredSupervisor bool) error {
 	if c.Planner.SchemaFolder == nil {
 		return errors.New("missing config.Planner.SchemaFolder")
 	}
+
 	return nil
 }
 
@@ -168,6 +181,18 @@ func (c *Config) validateValues() error {
 func (c *Config) validateSupervisor() error {
 	if c.Supervisor == nil {
 		return nil
+	}
+
+	if c.Supervisor.GraphVersion != "" {
+		_, err := semver.NewVersion(c.Supervisor.GraphVersion)
+		if err != nil {
+			return err
+		}
+	}
+	if c.Supervisor.InitialBatch != DefaultInitialBatch {
+		if _, ok := c.Planner.Batches[c.Supervisor.InitialBatch]; !ok {
+			return errors.New("initial Batch must be of the Planner.Batches names or 'schema'")
+		}
 	}
 
 	if c.Supervisor.Port < 1024 || c.Supervisor.Port > 65535 {
@@ -209,6 +234,9 @@ func (c *Config) validateFoldersAndBatches() error {
 
 	// Planner.Folders parts
 	for folderName, folderDetail := range c.Planner.Folders {
+		if folderName == "" {
+			return fmt.Errorf("name of folder in Planner.Folders can't be an empty string")
+		}
 		if folderName == c.Planner.SchemaFolder.FolderName {
 			return fmt.Errorf(
 				"folder '%s' is used as schema folder and cannot be used again in planner.folders", folderName)
@@ -229,6 +257,9 @@ func (c *Config) validateFoldersAndBatches() error {
 	}
 
 	for batchName, batchDetail := range c.Planner.Batches {
+		if batchName == "" {
+			return fmt.Errorf("name of batch in Planner.Batches can't be an empty string")
+		}
 		if batchDetail == nil {
 			return fmt.Errorf("empty configuration for batch '%s'", batchName)
 		}

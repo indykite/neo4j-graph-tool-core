@@ -28,8 +28,11 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":     Equal(config.DefaultPort),
-				"LogLevel": Equal(config.DefaultLogLevel),
+				"Port":         Equal(config.DefaultPort),
+				"LogLevel":     Equal(config.DefaultLogLevel),
+				"GraphVersion": Equal("v1.0.0"),
+				"InitialBatch": Equal("schema"),
+				"Neo4jAuth":    Equal("username/password"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
 				"BaseFolder":     Equal(config.DefaultBaseFolder),
@@ -60,14 +63,122 @@ var _ = Describe("LoadFile", func() {
 			})),
 		})))
 	})
+	It("Set Environment variables", func() {
+		closer := envSetter(map[string]string{
+			"GT_SUPERVISOR_LOG_LEVEL":              "error",
+			"GT_SUPERVISOR_PORT":                   "1500",
+			"GT_SUPERVISOR_GRAPH_VERSION":          "v1.0.0",
+			"GT_SUPERVISOR_INITIAL_BATCH":          "data",
+			"GT_SUPERVISOR_NEO4J_AUTH":             "identification",
+			"GT_PLANNER_BASE_FOLDER":               "base_folder",
+			"GT_PLANNER_DROP_CYPHER_FILE":          "cypher.file",
+			"GT_PLANNER_SCHEMA_FOLDER_NODE_LABELS": "abc,def", // array of two elements
+			"GT_PLANNER_BATCHES_FOLDERS":           "data",
+			"GT_PLANNER_BATCHES_DATA_FOLDERS":      "perf",
+		})
+		GinkgoT().Cleanup(closer)
+
+		res, err := config.LoadFile("testdata/configData.toml")
+		Expect(err).To(Succeed())
+		Expect(res).To(PointTo(MatchAllFields(Fields{
+			"Supervisor": PointTo(MatchAllFields(Fields{
+				"Port":         Equal(1500),
+				"LogLevel":     Equal("error"),
+				"GraphVersion": Equal("v1.0.0"),
+				"InitialBatch": Equal("data"),
+				"Neo4jAuth":    Equal("identification"),
+			})),
+			"Planner": PointTo(MatchAllFields(Fields{
+				"BaseFolder":     Equal("base_folder"),
+				"DropCypherFile": Equal("cypher.file"),
+				"Batches": MatchAllKeys(Keys{
+					"data": PointTo(MatchAllFields(Fields{
+						"Folders": ConsistOf("perf"),
+					})),
+					"performance": PointTo(MatchAllFields(Fields{
+						"Folders": ConsistOf("data", "perf"),
+					})),
+				}),
+				"Folders": MatchAllKeys(Keys{
+					"data": PointTo(MatchAllFields(Fields{
+						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"NodeLabels":    ConsistOf("DataVersion"),
+					})),
+					"perf": PointTo(MatchAllFields(Fields{
+						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"NodeLabels":    ConsistOf("PerfVersion"),
+					})),
+				}),
+				"SchemaFolder": PointTo(MatchAllFields(Fields{
+					"FolderName":    Equal(config.DefaultSchemaFolderName),
+					"MigrationType": Equal(config.DefaultSchemaMigrationType),
+					"NodeLabels":    ConsistOf("abc", "def"),
+				})),
+			})),
+		})))
+
+	})
+
+	It("Set deprecated environment variables", func() {
+		closer := envSetter(map[string]string{
+			"GRAPH_MODEL_KIND":    "data",
+			"GRAPH_MODEL_VERSION": "v2.0.0",
+			"NEO4J_AUTH":          "identification",
+		})
+		GinkgoT().Cleanup(closer)
+
+		res, err := config.LoadFile("testdata/configData.toml")
+		Expect(err).To(Succeed())
+		Expect(res).To(PointTo(MatchAllFields(Fields{
+			"Supervisor": PointTo(MatchAllFields(Fields{
+				"Port":         Equal(config.DefaultPort),
+				"LogLevel":     Equal(config.DefaultLogLevel),
+				"GraphVersion": Equal("v2.0.0"),
+				"InitialBatch": Equal("data"),
+				"Neo4jAuth":    Equal("identification"),
+			})),
+			"Planner": PointTo(MatchAllFields(Fields{
+				"BaseFolder":     Equal(config.DefaultBaseFolder),
+				"DropCypherFile": Equal(config.DefaultDropCypherFile),
+				"Batches": MatchAllKeys(Keys{
+					"data": PointTo(MatchAllFields(Fields{
+						"Folders": ConsistOf("data"),
+					})),
+					"performance": PointTo(MatchAllFields(Fields{
+						"Folders": ConsistOf("data", "perf"),
+					})),
+				}),
+				"Folders": MatchAllKeys(Keys{
+					"data": PointTo(MatchAllFields(Fields{
+						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"NodeLabels":    ConsistOf("DataVersion"),
+					})),
+					"perf": PointTo(MatchAllFields(Fields{
+						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"NodeLabels":    ConsistOf("PerfVersion"),
+					})),
+				}),
+				"SchemaFolder": PointTo(MatchAllFields(Fields{
+					"FolderName":    Equal(config.DefaultSchemaFolderName),
+					"MigrationType": Equal(config.DefaultSchemaMigrationType),
+					"NodeLabels":    ConsistOf(config.DefaultNodeLabel, "SchemaVersion"),
+				})),
+			})),
+		})))
+
+	})
 
 	It("Default data", func() {
+
 		res, err := config.New()
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":     Equal(config.DefaultPort),
-				"LogLevel": Equal(config.DefaultLogLevel),
+				"Port":         Equal(config.DefaultPort),
+				"LogLevel":     Equal(config.DefaultLogLevel),
+				"GraphVersion": HaveLen(0),
+				"InitialBatch": Equal("schema"),
+				"Neo4jAuth":    HaveLen(0),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
 				"BaseFolder":     Equal(config.DefaultBaseFolder),
@@ -113,8 +224,10 @@ var _ = Describe("Validation & Normalize", func() {
 	BeforeEach(func() {
 		configStruct = &config.Config{
 			Supervisor: &config.Supervisor{
-				Port:     config.DefaultPort,
-				LogLevel: config.DefaultLogLevel,
+				Port:         config.DefaultPort,
+				LogLevel:     config.DefaultLogLevel,
+				InitialBatch: "schema",
+				Neo4jAuth:    "auth",
 			},
 			Planner: &config.Planner{
 				BaseFolder:     config.DefaultBaseFolder,
@@ -156,7 +269,7 @@ var _ = Describe("Validation & Normalize", func() {
 
 	It("Successfully validate manual config", func() {
 		cfg := &config.Config{
-			Supervisor: &config.Supervisor{Port: 2555, LogLevel: "debug"},
+			Supervisor: &config.Supervisor{Port: 2555, LogLevel: "debug", InitialBatch: "schema"},
 			Planner: &config.Planner{
 				BaseFolder: "abc",
 				SchemaFolder: &config.SchemaFolder{
@@ -166,6 +279,10 @@ var _ = Describe("Validation & Normalize", func() {
 		err := cfg.Validate()
 		Expect(err).To(Succeed())
 	})
+	// FIT("SuperVisor InitialBatch", func() {
+	// 	configStruct.Supervisor.InitialBatch = "data"
+	// 	err := configStruct.Validate()
+	// })
 
 	It("Validate and ValidateWithSupervisor fails when config is empty", func() {
 		configStruct = nil
@@ -226,6 +343,14 @@ var _ = Describe("Validation & Normalize", func() {
 			}
 		}, MatchError("empty configuration for batch 'my-batch'")),
 
+		Entry("Folders key empty string", func(cfg *config.Config) {
+			cfg.Planner.Folders[""] = &config.FolderDetail{}
+		}, MatchError("name of folder in Planner.Folders can't be an empty string")),
+
+		Entry("Batches key empty string", func(cfg *config.Config) {
+			cfg.Planner.Batches[""] = &config.BatchDetail{}
+		}, MatchError("name of batch in Planner.Batches can't be an empty string")),
+
 		Entry("Schema folder name in batch folders array", func(cfg *config.Config) {
 			cfg.Planner.Batches = map[string]*config.BatchDetail{
 				"my-batch": {Folders: []string{cfg.Planner.SchemaFolder.FolderName}},
@@ -251,6 +376,14 @@ var _ = Describe("Validation & Normalize", func() {
 		Entry("Log Level", func(cfg *config.Config) {
 			cfg.Supervisor.LogLevel = "xxx"
 		}, MatchError("logLevel value 'xxx' is invalid, must be one of 'fatal,error,warn,info,debug,trace'")),
+
+		Entry("Graph Version", func(cfg *config.Config) {
+			cfg.Supervisor.GraphVersion = "www"
+		}, MatchError(ContainSubstring("Invalid Semantic Version"))),
+
+		Entry("Initial Batch", func(cfg *config.Config) {
+			cfg.Supervisor.InitialBatch = "invalid"
+		}, MatchError("initial Batch must be of the Planner.Batches names or 'schema'")),
 
 		Entry("Folder MigrationType", func(cfg *config.Config) {
 			cfg.Planner.Folders["data"].MigrationType = "invalidName"

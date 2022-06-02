@@ -1,6 +1,9 @@
 [supervisor]
 port = 8080
 log_level = 'warn'
+graph_version = 'v1.0.0'
+initial_batch = "schema"
+neo4j_auth = "username/password"
 
 [planner]
 base_folder = 'import'
