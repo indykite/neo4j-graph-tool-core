@@ -149,6 +149,9 @@ var _ = Describe("Validation & Normalize", func() {
 	It("Success validation", func() {
 		err := configStruct.Validate()
 		Expect(err).To(Succeed())
+
+		err = configStruct.ValidateWithSupervisor()
+		Expect(err).To(Succeed())
 	})
 
 	It("Successfully validate manual config", func() {
@@ -164,26 +167,40 @@ var _ = Describe("Validation & Normalize", func() {
 		Expect(err).To(Succeed())
 	})
 
-	It("Validate fails when config is empty", func() {
+	It("Validate and ValidateWithSupervisor fails when config is empty", func() {
 		configStruct = nil
+
 		err := configStruct.Validate()
+		Expect(err).To(MatchError("missing config"))
+
+		err = configStruct.ValidateWithSupervisor()
 		Expect(err).To(MatchError("missing config"))
 	})
 
-	DescribeTable("Validate error cases",
+	It("ValidateWithSupervisor fails when Supervisor is missing, but Validate succeed", func() {
+		configStruct.Supervisor = nil
+
+		err := configStruct.Validate()
+		Expect(err).To(Succeed())
+
+		err = configStruct.ValidateWithSupervisor()
+		Expect(err).To(MatchError("missing config.Supervisor"))
+	})
+
+	DescribeTable("Validate and ValidateWithSupervisor error cases",
 		func(changeCfg func(*config.Config), errorMatcher OmegaMatcher) {
 			changeCfg(configStruct)
+
 			err := configStruct.Validate()
+			Expect(err).To(errorMatcher)
+
+			err = configStruct.ValidateWithSupervisor()
 			Expect(err).To(errorMatcher)
 		},
 
 		Entry("Missing planner", func(cfg *config.Config) {
 			cfg.Planner = nil
 		}, MatchError("missing config.Planner")),
-
-		Entry("Missing supervisor", func(cfg *config.Config) {
-			cfg.Supervisor = nil
-		}, MatchError("missing config.Supervisor")),
 
 		Entry("Missing schema folder", func(cfg *config.Config) {
 			cfg.Planner.SchemaFolder = nil
