@@ -16,6 +16,7 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,22 +25,31 @@ import (
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
 
+	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/planner"
 )
 
 type supervisor struct {
 	context   context.Context
 	cancelCtx context.CancelFunc
+	cfg       *config.Config
 
 	neo4j      *Neo4jWrapper
 	log        logrus.FieldLogger
 	httpServer *httpServer
 
-	target *planner.GraphState
-	kind   planner.Kind
+	schemaVersion *planner.GraphState
+	initialBatch  planner.Kind
 }
 
-func Start() {
+// Start the HTTP Supervisor server, Neo4j DB and load initial data.
+// Returns error when config is not valid
+func Start(cfg *config.Config) error {
+	var err error
+
+	if err = cfg.ValidateWithSupervisor(); err != nil {
+		return err
+	}
 	// Program is checking interrupt channel. But even if it wouldn't, signal.Notify must be here.
 	// Otherwise, the program nor the sub proccesses will not receive interrupt signal
 	// and docker will kill it immediately
@@ -47,11 +57,13 @@ func Start() {
 	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
 
 	log := logrus.New()
+	log.SetLevel(stringToLogrusLogLevel(cfg.Supervisor.LogLevel))
 	log.Formatter = &nested.Formatter{FieldsOrder: []string{ComponentLogKey}}
+
 	log.Info("Starting supervisor")
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	neo4j := NewNeo4jWrapper(ctx, log.WithField(ComponentLogKey, "wrapper"))
+	neo4j := NewNeo4jWrapper(ctx, cfg, log.WithField(ComponentLogKey, "wrapper"))
 
 	s := &supervisor{
 		context:   ctx,
@@ -60,10 +72,12 @@ func Start() {
 		neo4j:     neo4j,
 	}
 
-	s.loadKindTargets()
+	if err = s.loadKindTargets(); err != nil {
+		return err
+	}
 
 	// Start HTTP server in background thread
-	s.httpServer = runHTTPServer(ctx, neo4j, log, s.target, s.kind)
+	s.httpServer = runHTTPServer(ctx, neo4j, log, s.schemaVersion, s.initialBatch)
 
 	// Will wait for DB and then insert data into DB
 	go s.bootstrapDB()
@@ -71,29 +85,37 @@ func Start() {
 	// All is running, just wait for an interrupt signal to stop
 	<-interruptChan
 	s.stop()
+
+	return nil
 }
 
-func (s *supervisor) loadKindTargets() {
+func (s *supervisor) loadKindTargets() error {
 	var err error
 
-	if v := os.Getenv("GRAPH_MODEL_VERSION"); v != "" {
-		s.target, err = planner.ParseGraphVersion(v)
+	if v := s.cfg.Supervisor.GraphVersion; v != "" {
+		s.schemaVersion, err = planner.ParseGraphVersion(v)
 		if err != nil {
-			s.log.Fatalf("invalid model version: %s - %v", v, err)
+			return fmt.Errorf("invalid graph version '%s': %w", v, err)
 		}
-		s.log.WithField("version", s.target).Info("Target GraphModel is set")
+		s.log.WithField("version", s.schemaVersion).Info("Target Graph Version is set")
 	} else {
 		s.log.Warn("Target GraphModel is not set")
 	}
 
-	switch os.Getenv("GRAPH_MODEL_KIND") {
-	case "perf":
-		s.kind = planner.Perf
-	case "model":
-		s.kind = planner.Model
-	default:
-		s.kind = planner.Data
+	// TODO: here
+	// s.kind = s.cfg.Supervisor.InitialBatch
+	s.log.WithField("batch", s.cfg.Supervisor.InitialBatch).Info("Initial batch is set")
+
+	return nil
+}
+
+func stringToLogrusLogLevel(level string) logrus.Level {
+	l, err := logrus.ParseLevel(level)
+	// When invalid level is passed, just set debug and silently ignore the error.
+	if err != nil {
+		l = logrus.DebugLevel
 	}
+	return l
 }
 
 func (s *supervisor) bootstrapDB() {
@@ -105,7 +127,7 @@ func (s *supervisor) bootstrapDB() {
 		return
 	}
 
-	err = s.neo4j.RefreshData(s.target, false, true, s.kind)
+	err = s.neo4j.RefreshData(s.schemaVersion, false, true, s.initialBatch)
 	if err != nil {
 		s.log.WithError(err).Error("failed to bootstrap database")
 	}

@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/planner"
 )
 
@@ -36,8 +36,10 @@ const (
 	boltAddr              = "bolt://127.0.0.1:7687"
 	boltCheckSec          = 2
 	boltCheckQuitAfterSec = 5 * 60
-	importDir             = "/initial-data/import"
+	initialDataDir        = "/initial-data/"
 	ComponentLogKey       = "system"
+	dockerEntryPointPath  = "/startup/docker-entrypoint.sh"
+	graphToolPath         = "/app/graph-tool"
 
 	Stopped  Neo4jState = "Stopped"
 	Failed   Neo4jState = "Failed"
@@ -47,7 +49,7 @@ const (
 )
 
 var (
-	processArgs       = []string{"/startup/docker-entrypoint.sh", "neo4j"}
+	processArgs       = []string{dockerEntryPointPath, "neo4j"}
 	cancelWaitingChan chan os.Signal
 	// Semaphore supports TryAcquire which can checks locks only, and not block execution
 	serviceSem = semaphore.NewWeighted(1)
@@ -55,18 +57,22 @@ var (
 	utilsMux   = &sync.Mutex{}
 )
 
+// Neo4jWrapper wraps command and helper functions to operate with Neo4j server together with utilities.
 type Neo4jWrapper struct {
+	context context.Context
+	cfg     *config.Config
+
 	serviceCmd   *TSCmd
 	log          *logrus.Entry
 	utilsCmd     map[string]*TSCmd
-	Context      context.Context
 	serviceState Neo4jState
 }
 
 // NewNeo4jWrapper creates wrapper for handling Neo4j and utilities
-func NewNeo4jWrapper(ctx context.Context, log *logrus.Entry) *Neo4jWrapper {
+func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry) *Neo4jWrapper {
 	return &Neo4jWrapper{
-		Context:      ctx,
+		context:      ctx,
+		cfg:          cfg,
 		serviceState: Stopped,
 		utilsCmd:     map[string]*TSCmd{},
 		log:          log,
@@ -75,16 +81,16 @@ func NewNeo4jWrapper(ctx context.Context, log *logrus.Entry) *Neo4jWrapper {
 
 // State returns the current service state
 func (w *Neo4jWrapper) State() (Neo4jState, error) {
-	if err := serviceSem.Acquire(w.Context, 1); err != nil {
+	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return Failed, err
 	}
 	defer serviceSem.Release(1)
 	return w.serviceState, nil
 }
 
-// SetState sets the current service state
-func (w *Neo4jWrapper) SetState(state Neo4jState) error {
-	if err := serviceSem.Acquire(w.Context, 1); err != nil {
+// setState sets the current service state
+func (w *Neo4jWrapper) setState(state Neo4jState) error {
+	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return err
 	}
 	defer serviceSem.Release(1)
@@ -139,7 +145,7 @@ func (w *Neo4jWrapper) Start() error {
 func (w *Neo4jWrapper) Stop() error {
 	// Always run Stop and do not fail, so wait until semaphore is released.
 	// For example calling stop during starting, it should wait and stop
-	if err := serviceSem.Acquire(w.Context, 1); err != nil {
+	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return err
 	}
 	defer serviceSem.Release(1)
@@ -173,7 +179,7 @@ func (w *Neo4jWrapper) Stop() error {
 	go func() {
 		w.log.Trace("Waiting for neo4j to exit to cleanup state")
 		_ = w.serviceCmd.WaitTS()
-		if err := serviceSem.Acquire(w.Context, 1); err == nil {
+		if err := serviceSem.Acquire(w.context, 1); err == nil {
 			w.serviceCmd = nil
 			w.serviceState = Stopped
 			serviceSem.Release(1)
@@ -206,31 +212,28 @@ func (w *Neo4jWrapper) Restart() error {
 	return stopErr
 }
 
-// StopAll sends stopping signal for all started processes, but does not wait for exit
+// StopAll sends Interrupt signal for all processes and then stops main Neo4j process, but does not wait for exit.
 func (w *Neo4jWrapper) StopAll() error {
-	err := w.Stop()
-	if err != nil {
-		return err
-	}
 	utilsMux.Lock()
 	defer utilsMux.Unlock()
 	for un, v := range w.utilsCmd {
 		if v != nil {
-			utilsLog(w.log, un).Trace("Sent Interrupt signal")
+			w.utilsLog(un).Trace("Sent Interrupt signal")
 			err := v.Process.Signal(os.Interrupt)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	return nil
+
+	return w.Stop()
 }
 
 // Wait waits until main process is exited
 // To wait for utilities use WaitAll
 func (w *Neo4jWrapper) Wait() error {
 	// Create copy of TSCmd to avoid locking all other methods when waiting
-	if err := serviceSem.Acquire(w.Context, 1); err != nil {
+	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return err
 	}
 	serviceCmd := w.serviceCmd // nolint:ifshort
@@ -255,16 +258,13 @@ func (w *Neo4jWrapper) WaitAll() error {
 	}
 	utilsMux.Unlock()
 	for n, v := range utils {
-		utilsLog(w.log, n).Debug("Waiting to exit")
+		ul := w.utilsLog(n)
+		ul.Debug("Waiting to exit")
 		_ = v.WaitTS()
-		utilsLog(w.log, n).Trace("Exited")
+		ul.Trace("Exited")
 	}
 
 	return nil
-}
-
-func (w *Neo4jWrapper) Driver() (neo4j.Driver, error) {
-	return neo4j.NewDriver(boltAddr, neo4j.BasicAuth(getNeo4jBasicAuth()))
 }
 
 // WaitForNeo4j blocks execution until Neo4j is ready, or returns error if service is not starting
@@ -285,7 +285,7 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 
 	cancelled := false
 	if isStarting {
-		if err := serviceSem.Acquire(w.Context, 1); err != nil {
+		if err := serviceSem.Acquire(w.context, 1); err != nil {
 			return err
 		}
 		cancelWaitingChan = make(chan os.Signal, 1)
@@ -293,7 +293,7 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 		ticker := time.NewTicker(boltCheckSec * time.Second)
 		connected := false
 		w.log.Trace("Starting Bolt checking loop")
-		dr, err := neo4j.NewDriver(boltAddr, neo4j.BasicAuth(getNeo4jBasicAuth()))
+		dr, err := neo4j.NewDriver(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
 		if err != nil {
 			return err
 		}
@@ -315,7 +315,7 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 				w.log.Tracef("Bolt port is not ready yet, waiting %d seconds", boltCheckSec)
 			}
 		}
-		if err := serviceSem.Acquire(w.Context, 1); err != nil {
+		if err := serviceSem.Acquire(w.context, 1); err != nil {
 			return err
 		}
 		defer serviceSem.Release(1)
@@ -347,93 +347,6 @@ func (w *Neo4jWrapper) RefreshData(target *planner.GraphState, dryRun, clean boo
 	return nil
 }
 
-const (
-	modelVersionCypher = `MATCH (sm:ModelVersion) RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
-ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-	dataVersionCypher = `MATCH (sm:DataVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
-ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-	perfVersionCypher = `MATCH (sm:PerfVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
-ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-)
-
-func Version(driver neo4j.Driver) (*planner.GraphModel, error) {
-	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	model, err := queryVersion(session, modelVersionCypher)
-	if err != nil {
-		return nil, err
-	}
-	data, err := queryVersion(session, dataVersionCypher)
-	if err != nil {
-		return nil, err
-	}
-	perf, err := queryVersion(session, perfVersionCypher)
-	if err != nil {
-		return nil, err
-	}
-	return &planner.GraphModel{
-		Model: model,
-		Data:  data,
-		Perf:  perf,
-	}, nil
-}
-
-func queryVersion(session neo4j.Session, cypher string) (*planner.GraphState, error) {
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		result, err := tx.Run(cypher, nil)
-		if err != nil {
-			return nil, err
-		}
-		if result.Next() {
-			if result.Err() != nil {
-				return nil, result.Err()
-			}
-			record := result.Record()
-
-			gs := new(planner.GraphState)
-
-			for i, name := range record.Keys {
-				switch name {
-				case "version":
-					v, ok := record.Values[i].(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid version filed from the response")
-					}
-
-					gs.Version, err = semver.NewVersion(v)
-					if err != nil {
-						return nil, err
-					}
-				case "rev":
-					v, ok := record.Values[i].(int64)
-					if !ok {
-						return nil, fmt.Errorf("invalid rev filed from the response")
-					}
-					gs.Revision = uint64(v)
-				case "dirty":
-					switch v := record.Values[i].(type) {
-					case bool:
-						_ = v
-					case nil:
-
-					default:
-						return nil, fmt.Errorf("invalid dirty filed from the response")
-					}
-				}
-			}
-			return gs, nil
-		}
-		return nil, result.Err()
-	})
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return nil, nil
-	}
-	mr := result.(*planner.GraphState)
-	return mr, nil
-}
-
 func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, kind planner.Kind) error {
 	state, err := w.State()
 	if err != nil {
@@ -451,13 +364,13 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 			return err
 		}
 		defer func() { _ = d.Close() }()
-		model, err = Version(d)
+		model, err = planner.Version(d)
 		if err != nil {
 			return err
 		}
 	}
 
-	t, err := planner.NewScanner(importDir)
+	t, err := planner.NewScanner(w.getImportDir())
 	if err != nil {
 		return err
 	}
@@ -476,7 +389,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 
 	execSteps := new(planner.ExecutionSteps)
 	if clean {
-		if err = drop(importDir, execSteps); err != nil {
+		if err = w.drop(execSteps); err != nil {
 			return err
 		}
 	}
@@ -497,9 +410,9 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 		return nil
 	}
 
-	user, pass := getNeo4jAuthForCLI()
+	user, pass := w.getNeo4jAuthForCLI()
 
-	if err = w.SetState(Starting); err != nil {
+	if err = w.setState(Starting); err != nil {
 		return err
 	}
 
@@ -515,7 +428,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 			case "exit":
 				continue
 			case "graph-tool":
-				toExec[0] = "/app/graph-tool"
+				toExec[0] = graphToolPath
 			}
 			_, err = w.startUtility(true, nil, append(toExec, "-u", user, "-p", pass)...)
 		}
@@ -526,7 +439,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 	}
 	w.log.Debug("Import finished file")
 
-	if stateErr := w.SetState(Running); stateErr != nil {
+	if stateErr := w.setState(Running); stateErr != nil {
 		return stateErr
 	}
 	return err
@@ -535,25 +448,26 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) (*TSCmd, error) {
 	utilName := args[0]
 	utilsMux.Lock()
+	ul := w.utilsLog(utilName)
 	if _, found := w.utilsCmd[utilName]; found {
-		utilsLog(w.log, utilName).Debug("Utility cannot be started more than once")
+		ul.Debug("Utility cannot be started more than once")
 		return nil, fmt.Errorf("utility '%s' is already running", utilName)
 	}
-	utilsLog(w.log, utilName).Trace("Starting utility")
-	cmd, err := StartCmd(utilsLog(w.log, utilName), stdin, args...)
+	ul.Trace("Starting utility")
+	cmd, err := StartCmd(ul, stdin, args...)
 	if err != nil {
 		return nil, err
 	}
 	w.utilsCmd[utilName] = cmd
 	utilsMux.Unlock()
-	utilsLog(w.log, utilName).Trace("Utility started")
+	ul.Trace("Utility started")
 
 	waitAndClean := func() error {
 		err = cmd.WaitTS()
 		utilsMux.Lock()
 		defer utilsMux.Unlock()
 		delete(w.utilsCmd, utilName)
-		utilsLog(w.log, utilName).Trace("Cleaned up after utility finished")
+		ul.Trace("Cleaned up after utility finished")
 		return err
 	}
 

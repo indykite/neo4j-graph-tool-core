@@ -77,7 +77,7 @@ type (
 )
 
 var (
-	logLevelValues = []string{"fatal", "error", "warn", "info", "debug", "trace"}
+	logLevelValues = []string{"fatal", "error", "warn", "warning", "info", "debug", "trace"}
 	migrationTypes = []string{"change", "up_down"}
 	labelCaser     = cases.Title(language.English)
 )

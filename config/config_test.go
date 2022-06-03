@@ -322,7 +322,7 @@ var _ = Describe("Validation & Normalize", func() {
 
 		Entry("Log Level", func(cfg *config.Config) {
 			cfg.Supervisor.LogLevel = "xxx"
-		}, MatchError("logLevel value 'xxx' is invalid, must be one of 'fatal,error,warn,info,debug,trace'")),
+		}, MatchError("logLevel value 'xxx' is invalid, must be one of 'fatal,error,warn,warning,info,debug,trace'")),
 
 		Entry("Graph Version", func(cfg *config.Config) {
 			cfg.Supervisor.GraphVersion = "www"
