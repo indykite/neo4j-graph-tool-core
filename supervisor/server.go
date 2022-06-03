@@ -50,6 +50,7 @@ func runHTTPServer(
 	}
 
 	// Prepare HTTP server routes
+	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 	g.Use(gin.Recovery())
 	g.GET("/refresh-data", s.refreshDataHandler(true))
@@ -69,7 +70,7 @@ func runHTTPServer(
 	}
 
 	go func() {
-		// ListenAndServe always returns error. ErrServerClosed on graceful close
+		// ListenAndServe always returns error. ErrServerClosed on graceful close.
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			s.httpLog.Fatalf("Serve failed: %v", err)
 		}
@@ -144,19 +145,16 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 			return
 		}
 		dryRun := false
-		loadKind := s.defaultKind
 		if v, ok := c.GetQuery("dryRun"); ok && v == "true" {
 			dryRun = true
 		}
-		if v, ok := c.GetQuery("kind"); ok {
-			switch v {
-			case "perf":
-				loadKind = planner.Perf
-			case "model":
-				loadKind = planner.Model
-			}
+
+		loadBatch := s.defaultKind
+		if v, ok := c.GetQuery("batch"); ok {
+			_ = v
+			// loadBatch = v
 		}
-		if err := s.neo4j.RefreshData(gs, dryRun, clean, loadKind); err == nil {
+		if err := s.neo4j.RefreshData(gs, dryRun, clean, loadBatch); err == nil {
 			c.JSON(http.StatusOK, gin.H{
 				"msg": "Data successfully refreshed",
 			})
@@ -174,7 +172,7 @@ func (s *httpServer) versionHandler(c *gin.Context) {
 		return
 	}
 	defer func() { _ = driver.Close() }()
-	model, err := Version(driver)
+	model, err := planner.Version(driver)
 	if err != nil {
 		s.sendError(c, err)
 		return
