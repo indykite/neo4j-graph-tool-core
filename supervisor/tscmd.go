@@ -40,8 +40,10 @@ type TSCmd struct {
 	sync.Mutex
 }
 
-// WaitTS (Wait Thread Safe) is Waiting for multiple threads
-// Wait on original os/exec.Cmd is called just once
+// WaitTS (Wait Thread Safe) will wait until command stops. This can be called multiple times with same result.
+//
+// Original Wait() on original os/exec.Cmd when called multiple times can return different results,
+// depends on which lifecycle of command the Wait() is called.
 func (c *TSCmd) WaitTS() error {
 	c.Lock()
 	defer c.Unlock()
@@ -53,6 +55,10 @@ func (c *TSCmd) WaitTS() error {
 	return c.errWrap.err
 }
 
+// StartCmd starts command inside wrapper with thread-safe Wait method.
+// First element of args array is taken as command, others are used as arguments of the command.
+// Also stdout and stderr are redirected into log.
+// Argument stdin is redirected into the command, if is set.
 func StartCmd(log *logrus.Entry, stdin io.Reader, args ...string) (cmd *TSCmd, err error) {
 	log.Debug("Executing: ", args)
 	cmd = &TSCmd{

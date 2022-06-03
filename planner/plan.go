@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 )
 
 type (
@@ -211,4 +212,91 @@ func addCommand(steps *ExecutionSteps, cf *CypherFile) error {
 		return errors.New("no commands to run in file, use 'exit' command to ignore file")
 	}
 	return nil
+}
+
+const (
+	modelVersionCypher = `MATCH (sm:ModelVersion) RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
+ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
+	dataVersionCypher = `MATCH (sm:DataVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
+ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
+	perfVersionCypher = `MATCH (sm:PerfVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
+ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
+)
+
+func Version(driver neo4j.Driver) (*GraphModel, error) {
+	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	model, err := queryVersion(session, modelVersionCypher)
+	if err != nil {
+		return nil, err
+	}
+	data, err := queryVersion(session, dataVersionCypher)
+	if err != nil {
+		return nil, err
+	}
+	perf, err := queryVersion(session, perfVersionCypher)
+	if err != nil {
+		return nil, err
+	}
+	return &GraphModel{
+		Model: model,
+		Data:  data,
+		Perf:  perf,
+	}, nil
+}
+
+func queryVersion(session neo4j.Session, cypher string) (*GraphState, error) {
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		result, err := tx.Run(cypher, nil)
+		if err != nil {
+			return nil, err
+		}
+		if result.Next() {
+			if result.Err() != nil {
+				return nil, result.Err()
+			}
+			record := result.Record()
+
+			gs := new(GraphState)
+
+			for i, name := range record.Keys {
+				switch name {
+				case "version":
+					v, ok := record.Values[i].(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid version filed from the response")
+					}
+
+					gs.Version, err = semver.NewVersion(v)
+					if err != nil {
+						return nil, err
+					}
+				case "rev":
+					v, ok := record.Values[i].(int64)
+					if !ok {
+						return nil, fmt.Errorf("invalid rev filed from the response")
+					}
+					gs.Revision = uint64(v)
+				case "dirty":
+					switch v := record.Values[i].(type) {
+					case bool:
+						_ = v
+					case nil:
+
+					default:
+						return nil, fmt.Errorf("invalid dirty filed from the response")
+					}
+				}
+			}
+			return gs, nil
+		}
+		return nil, result.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	mr := result.(*GraphState)
+	return mr, nil
 }

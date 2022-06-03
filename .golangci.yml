@@ -15,16 +15,16 @@ linters:
         - varcheck
 
         # Extra
-        - lll
         - asciicheck
         #- cyclop # Will be nice to return this back
         - gocritic
-        - revive
-        - gosec
         - gofmt
         - goimports
+        - gosec
         - ifshort
+        - lll
         - prealloc
+        - revive
         - unconvert
         - whitespace
 
@@ -89,5 +89,5 @@ issues:
               - revive
           text: exported (type|var|const).* should have comment .*or be unexported
         # Remove this during planner and supervisor refactor
-        - path: planner|supervisor
+        - path: planner
           text: exported .* should have comment .*or be unexported
