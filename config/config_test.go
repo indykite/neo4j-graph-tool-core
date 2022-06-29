@@ -362,7 +362,6 @@ var _ = Describe("Validation & Normalize", func() {
 
 		It("Successfully normalize manual config", func() {
 			cfg := &config.Config{
-				Supervisor: &config.Supervisor{Port: 2555, LogLevel: "debug"},
 				Planner: &config.Planner{
 					BaseFolder: "abc",
 					Folders: map[string]*config.FolderDetail{

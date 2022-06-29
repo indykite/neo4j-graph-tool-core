@@ -17,7 +17,6 @@ package planner
 import (
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,50 +26,47 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+
+	"github.com/indykite/neo4j-graph-tool-core/config"
 )
 
 type (
-	Scanner      string
-	Kind         int
-	FileType     int
-	GraphVersion struct {
-		version   *semver.Version
-		update    []*CypherFile
-		downgrade []*CypherFile
-		data      []*CypherFile
-		largeData []*CypherFile
-		// snapshot  *CypherFile
+	Scanner struct {
+		config  *config.Config
+		baseDir string
 	}
-	GraphState struct {
+	Batch    string
+	FileType int
+
+	VersionFolder struct {
+		version      *semver.Version
+		schemaFolder *folderScripts
+		extraFolders map[string]*folderScripts
+	}
+
+	folderScripts struct {
+		// up is used as 'change' type, as this is only applied during up action
+		up   []*MigrationFile
+		down []*MigrationFile
+	}
+
+	DatabaseModel map[string]*GraphVersion
+	GraphVersion  struct {
 		Version  *semver.Version `json:"version,omitempty"`
 		Revision uint64          `json:"rev,omitempty"`
 	}
-	GraphModel struct {
-		Model *GraphState `json:"model,omitempty"`
-		Data  *GraphState `json:"data,omitempty"`
-		Perf  *GraphState `json:"perf,omitempty"`
-	}
-	GraphVersions []*GraphVersion
-	CypherFile    struct {
+
+	VersionFolders []*VersionFolder
+
+	MigrationFile struct {
 		name     string
 		path     string
 		fileType FileType
-		kind     Kind
 		commit   uint64
 		upgrade  int8
 	}
-	StateError struct {
-		cause error
-		state *GraphModel
-	}
 )
 
-const (
-	Model Kind = iota
-	Data
-	Perf
-	// Snapshot
-)
 const (
 	Cypher FileType = iota
 	Command
@@ -82,55 +78,9 @@ var (
 	zero, _    = semver.NewVersion("0.0.0")
 )
 
-func (e *StateError) Error() string {
-	return e.cause.Error()
-}
-
-func (e *StateError) Unwrap() error {
-	return e.cause
-}
-func (e *StateError) As(i interface{}) bool {
-	_, ok := i.(*StateError)
-	return ok
-}
-
-func (e *StateError) Wrap(model, data, perf *GraphState, err error) error {
-	return &StateError{
-		state: &GraphModel{
-			Model: model,
-			Data:  data,
-			Perf:  perf,
-		},
-		cause: err,
-	}
-}
-
-// ParseGraphModel parses the SemVer versions of DB model and data version.
-func ParseGraphModel(model, data, perf string) (*GraphModel, error) {
-	v := new(GraphModel)
-	var err error
-	if model != "" {
-		v.Model, err = ParseGraphVersion(model)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if data != "" {
-		v.Data, err = ParseGraphVersion(data)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if perf != "" {
-		v.Perf, err = ParseGraphVersion(perf)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return v, nil
-}
-
-func (a *GraphState) Compare(b *GraphState) int {
+// Compare compares this version to another one. It returns -1, 0, or 1 if
+// the version smaller, equal, or larger than the other version.
+func (a *GraphVersion) Compare(b *GraphVersion) int {
 	c := a.Version.Compare(b.Version)
 	if c != 0 {
 		return c
@@ -153,7 +103,7 @@ func (a *GraphState) Compare(b *GraphState) int {
 	}
 }
 
-func (a *GraphState) String() string {
+func (a *GraphVersion) String() string {
 	if a == nil || a.Version == nil {
 		return ""
 	}
@@ -163,264 +113,60 @@ func (a *GraphState) String() string {
 	}
 	return a.Version.String()
 }
-func (a *GraphState) Set(v string) error {
-	var err error
+
+// Set sets version from string. Can be used with flag package
+func (a *GraphVersion) Set(v string) error {
 	if a == nil {
 		return errors.New("null value")
 	}
-	a.Version, err = semver.NewVersion(v)
+	gv, err := ParseGraphVersion(v)
 	if err != nil {
 		return err
 	}
-	if a.Version.Metadata() != "" {
-		a.Revision, err = strconv.ParseUint(a.Version.Metadata(), 10, 0)
-		if err != nil {
-			return fmt.Errorf("invalid metadata: %v", err)
-		}
-	}
+
+	a.Version = gv.Version
+	a.Revision = gv.Revision
 	return nil
 }
-func (a *GraphState) Type() string {
-	return "GraphSemVer"
+
+// Type returns type name, so it can be used with flag package
+func (a *GraphVersion) Type() string {
+	return "GraphVersion"
 }
 
-func (cf *CypherFile) FilePath() string {
+// FilePath returns path of migration file
+func (cf *MigrationFile) FilePath() string {
 	return cf.path
 }
 
-func (cf *CypherFile) String() string {
-	switch {
-	case cf.upgrade > 0:
-		return fmt.Sprintf("upgrade# cypher-shell -f %s", cf.path)
-	case cf.upgrade < 0:
-		return fmt.Sprintf("downgrade# cypher-shell -f %s", cf.path)
-	default:
-		return fmt.Sprintf("execute# cypher-shell -f %s", cf.path)
-	}
-}
-
-func NewScanner(root string) (Scanner, error) {
+// NewScanner creates file scanner
+func (p *Planner) NewScanner(root string) (*Scanner, error) {
 	fi, err := os.Stat(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("directory not exists: '%s'", root)
+			return nil, fmt.Errorf("directory not exists: '%s'", root)
 		}
-		return "", err
+		return nil, err
 	}
 	if !fi.IsDir() {
-		return "", fmt.Errorf("scanner must point to a directory '%s'", root)
+		return nil, fmt.Errorf("scanner must point to a directory '%s'", root)
 	}
-	return Scanner(root), err
+	return &Scanner{
+		config:  p.config,
+		baseDir: root,
+	}, nil
 }
 
-func (root Scanner) resolve(dir string) string {
+func (s *Scanner) resolve(dir string) string {
 	// Clean the path so that it cannot possibly begin with ../.
 	// If it did, the result of filepath.Join would be outside the
 	// tree rooted at root.  We probably won't ever see a path
 	// with .. in it, but be safe anyway.
 	dir = path.Clean(dir)
-	return filepath.Join(string(root), dir)
+	return filepath.Join(s.baseDir, dir)
 }
 
-// func (gv GraphVersions) UpgradeRev(low *GraphModel, high *GraphState, op Planner) (*GraphState, error) {
-//	return gv.Upgrade(low, high.Version, func(ver *semver.Version, cf *CypherFile) (bool, error) {
-//		if cf.kind == Model && high.Revision > 0 && high.Revision < cf.commit && ver.Equal(high.Version) {
-//			return false, nil
-//		}
-//		return op(ver, cf)
-//	})
-// }
-
-func (gv GraphVersions) Upgrade(low *GraphModel,
-	high *semver.Version, hRev uint64, kind Kind, op Planner) (*GraphState, error) {
-	var err error
-	var modelVer, dataVer, perfVer *semver.Version
-	var lowRev, dataRev, perfRev uint64
-	if low != nil {
-		if low.Model != nil && low.Model.Version != nil {
-			modelVer = low.Model.Version
-			lowRev = low.Model.Revision
-		}
-		if low.Data != nil && low.Data.Version != nil {
-			dataVer = low.Data.Version
-			dataRev = low.Data.Revision
-		}
-		if low.Perf != nil && low.Perf.Version != nil {
-			perfVer = low.Perf.Version
-			perfRev = low.Perf.Revision
-		}
-	}
-
-	modelVer, high, err = gv.verifyRange(modelVer, high)
-	if err != nil {
-		return nil, err
-	}
-	dataVer, high, err = gv.verifyRange(dataVer, high)
-	if err != nil {
-		return nil, err
-	}
-	perfVer, high, err = gv.verifyRange(perfVer, high)
-	if err != nil {
-		return nil, err
-	}
-	changed := false
-	for _, vv := range gv {
-		if vv.version.GreaterThan(high) {
-			break
-		}
-		if vv.version.LessThan(modelVer) {
-			continue
-		}
-		var start, stop uint64 = 0, math.MaxUint64
-		if vv.version.Equal(modelVer) && lowRev != 0 {
-			start = lowRev
-		}
-		if vv.version.Equal(high) && hRev != 0 {
-			stop = hRev
-		}
-		for _, v := range vv.update {
-			if start >= v.commit {
-				continue
-			}
-			if stop < v.commit {
-				break
-			}
-			var b bool
-			b, err = op(vv.version, v)
-			if err != nil {
-				return nil, err
-			}
-			changed = changed || b
-		}
-		if kind >= Data && !vv.version.LessThan(dataVer) {
-			var start uint64
-			if vv.version.Equal(dataVer) && dataRev != 0 {
-				start = dataRev
-			} else {
-				start = 0
-			}
-			for _, v := range vv.data {
-				if start >= v.commit {
-					continue
-				}
-				var b bool
-				b, err = op(vv.version, v)
-				if err != nil {
-					return nil, err
-				}
-				changed = changed || b
-			}
-		}
-		if kind >= Perf && !vv.version.LessThan(perfVer) {
-			var start uint64
-			if vv.version.Equal(perfVer) && perfRev != 0 {
-				start = perfRev
-			} else {
-				start = 0
-			}
-			for _, v := range vv.largeData {
-				if start >= v.commit {
-					continue
-				}
-				var b bool
-				b, err = op(vv.version, v)
-				if err != nil {
-					return nil, err
-				}
-				changed = changed || b
-			}
-		}
-	}
-	if changed {
-		return &GraphState{Version: high}, err
-	}
-	return nil, nil
-}
-
-// func (gv GraphVersions) Downgrade(model *GraphState, target *semver.Version, op Planner) (*GraphState, error) {
-//	return gv.DowngradeRev(model, target, 0, op)
-// }
-
-func (gv GraphVersions) Downgrade(high *GraphState, low *semver.Version, hRev uint64, op Planner) (*GraphState, error) {
-	var err error
-	if low == nil {
-		low = gv[0].version
-	}
-	var highVer *semver.Version
-	var highRev uint64
-	if high != nil && high.Version != nil {
-		highVer = high.Version
-		highRev = high.Revision
-	}
-	low, highVer, err = gv.verifyRange(low, highVer)
-	if err != nil {
-		return nil, err
-	}
-
-	changed := false
-	for i := len(gv) - 1; i >= 0; i-- {
-		vv := gv[i]
-		if vv.version.GreaterThan(highVer) {
-			continue
-		}
-		if max := vv.downgrade[0].commit; vv.version.Equal(highVer) && highRev > max {
-			return nil, fmt.Errorf(
-				"out of range: can't downgrade ver %s from %d only from %d", vv.version, highRev, max)
-		}
-		if vv.version.Equal(low) {
-			switch {
-			case changed && hRev == 0:
-				return &GraphState{
-					Version:  vv.version,
-					Revision: vv.downgrade[0].commit,
-				}, nil
-			case hRev == 0:
-				// empty operations
-				return nil, nil
-			default:
-				after := &GraphState{
-					Version:  vv.version,
-					Revision: vv.downgrade[0].commit,
-				}
-				for i, v := range vv.downgrade[:len(vv.downgrade)-1] {
-					if v.commit <= hRev {
-						break
-					}
-					var b bool
-					b, err = op(vv.version, v)
-					if err != nil {
-						return nil, err
-					}
-					changed = changed || b
-					if changed {
-						after.Revision = vv.downgrade[i+1].commit
-					}
-				}
-				if changed {
-					return after, err
-				}
-				return nil, nil
-			}
-		}
-		var limit uint64 = math.MaxUint64
-		if vv.version.Equal(highVer) && highRev != 0 {
-			limit = highRev
-		}
-		for _, v := range vv.downgrade {
-			if v.commit > limit {
-				continue
-			}
-			b, err := op(vv.version, v)
-			if err != nil {
-				return nil, err
-			}
-			changed = changed || b
-		}
-	}
-	return nil, nil
-}
-
-func (gv GraphVersions) verifyRange(low, high *semver.Version) (*semver.Version, *semver.Version, error) {
+func (gv VersionFolders) verifyRange(low, high *semver.Version) (*semver.Version, *semver.Version, error) {
 	if low == nil {
 		low = zero
 	} else if low.LessThan(gv[0].version) {
@@ -437,68 +183,69 @@ func (gv GraphVersions) verifyRange(low, high *semver.Version) (*semver.Version,
 	return low, high, nil
 }
 
-func (root Scanner) ScanGraphModel() (GraphVersions, error) {
-	return root.Open("schema", func(ver *semver.Version, dirName string) (*GraphVersion, error) {
-		v := &GraphVersion{
-			version: ver,
+// ScanFolders start scanning and returns all up and down files divided per version and revision
+func (s *Scanner) ScanFolders() (VersionFolders, error) {
+	schemaFolderName := s.config.Planner.SchemaFolder.FolderName
+	allFolders, err := s.open(schemaFolderName, func(ver *semver.Version, dirName string) (*VersionFolder, error) {
+		v := &VersionFolder{
+			version:      ver,
+			schemaFolder: &folderScripts{},
+			extraFolders: make(map[string]*folderScripts), // Prepare map to avoid if statement in Open function
 		}
+
 		var err error
-		v.update, v.downgrade, err = root.scanGraphModelFolder(dirName)
-		if err != nil || len(v.update) == 0 || len(v.downgrade) == 0 {
+		if s.config.Planner.SchemaFolder.MigrationType == "up_down" {
+			v.schemaFolder.up, v.schemaFolder.down, err = s.scanUpDownTypeFolder(dirName)
+		} else {
+			v.schemaFolder.up, err = s.scanChangeTypeFolder(dirName)
+		}
+
+		// Don't need to check down, it is checked in UpDown method, or is empty for Change type
+		if err != nil || len(v.schemaFolder.up) == 0 {
 			return nil, err
 		}
 		return v, nil
 	})
-}
-
-func (root Scanner) ScanData(versions GraphVersions) (GraphVersions, error) {
-	_, err := root.Open("data", func(ver *semver.Version, dirName string) (*GraphVersion, error) {
-		for _, v := range versions {
-			if v.version.Equal(ver) {
-				var err error
-				v.data, err = root.scanTestDataFolder(dirName, Data)
-				if err != nil {
-					return nil, err
-				}
-				return nil, nil
-			}
-		}
-		return nil, fmt.Errorf("unspecified graph model for data %s", ver)
-	})
 	if err != nil {
 		return nil, err
 	}
-	return versions, nil
+
+	for folderName, folderDetail := range s.config.Planner.Folders {
+		_, err := s.open(folderName, func(ver *semver.Version, dirName string) (*VersionFolder, error) {
+			for _, v := range allFolders {
+				if v.version.Equal(ver) {
+					fs := &folderScripts{}
+					v.extraFolders[folderName] = fs
+
+					var err error
+					if folderDetail.MigrationType == "up_down" {
+						fs.up, fs.down, err = s.scanUpDownTypeFolder(dirName)
+					} else {
+						fs.up, err = s.scanChangeTypeFolder(dirName)
+					}
+
+					// Don't need to check down, it is checked in UpDown method, or is empty for Change type
+					if err != nil || len(v.schemaFolder.up) == 0 {
+						return nil, err
+					}
+
+					return nil, nil
+				}
+			}
+			return nil, fmt.Errorf("unspecified graph model for data %s", ver)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return allFolders, nil
 }
 
-func (root Scanner) ScanPerfData(versions GraphVersions) (GraphVersions, error) {
-	_, err := os.Stat(root.resolve("perf"))
-	switch {
-	case err != nil && os.IsNotExist(err):
-		return versions, nil
-	case err != nil:
-		return versions, err
-	}
-	_, err = root.Open("perf", func(ver *semver.Version, dirName string) (*GraphVersion, error) {
-		for _, v := range versions {
-			if v.version.Equal(ver) {
-				v.largeData, err = root.scanTestDataFolder(dirName, Perf)
-				if err != nil {
-					return nil, err
-				}
-				return nil, nil
-			}
-		}
-		return nil, fmt.Errorf("unspecified graph model for perf %s", ver)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return versions, nil
-}
-func (root Scanner) Open(dir string,
-	op func(ver *semver.Version, dirName string) (*GraphVersion, error)) ([]*GraphVersion, error) {
-	dPath := root.resolve(filepath.Clean(dir))
+func (s *Scanner) open(dir string,
+	op func(ver *semver.Version, dirName string) (*VersionFolder, error),
+) (VersionFolders, error) {
+	dPath := s.resolve(filepath.Clean(dir))
 	f, err := os.Open(filepath.Clean(dPath))
 	if err != nil {
 		return nil, err
@@ -517,7 +264,7 @@ func (root Scanner) Open(dir string,
 		return nil, err
 	}
 
-	var versions []*GraphVersion
+	var versions VersionFolders
 
 	for _, dn := range dirNames {
 		if strings.HasPrefix(dn, ".") {
@@ -544,7 +291,7 @@ func (root Scanner) Open(dir string,
 	return versions, nil
 }
 
-func (root Scanner) scanTestDataFolder(dir string, kind Kind) ([]*CypherFile, error) {
+func (s *Scanner) scanChangeTypeFolder(dir string) ([]*MigrationFile, error) {
 	f, err := os.Open(filepath.Clean(dir))
 	if err != nil {
 		return nil, err
@@ -554,7 +301,7 @@ func (root Scanner) scanTestDataFolder(dir string, kind Kind) ([]*CypherFile, er
 	if err != nil {
 		return nil, err
 	}
-	files := make([]*CypherFile, 0)
+	files := make([]*MigrationFile, 0)
 	for _, info := range list {
 		if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
 			continue
@@ -562,11 +309,10 @@ func (root Scanner) scanTestDataFolder(dir string, kind Kind) ([]*CypherFile, er
 
 		match := dataCypher.FindStringSubmatch(info.Name())
 		if len(match) != len(dataCypher.SubexpNames()) {
-			return nil, fmt.Errorf("file %s does not match with the name", path.Join(dir, info.Name()))
+			return nil, fmt.Errorf("file '%s' has invalid name", path.Join(dir, info.Name()))
 		}
 
-		cf := &CypherFile{
-			kind: kind,
+		cf := &MigrationFile{
 			path: path.Join(dir, info.Name()),
 		}
 
@@ -578,7 +324,7 @@ func (root Scanner) scanTestDataFolder(dir string, kind Kind) ([]*CypherFile, er
 					return nil, err
 				}
 				if cf.commit == 0 {
-					return nil, fmt.Errorf("forbidden number '0' at file %s", cf.path)
+					return nil, fmt.Errorf("forbidden number '0' at file '%s'", cf.path)
 				}
 			case "name":
 				cf.name = match[i]
@@ -604,8 +350,8 @@ func (root Scanner) scanTestDataFolder(dir string, kind Kind) ([]*CypherFile, er
 	return files, err
 }
 
-func (root Scanner) scanGraphModelFolder(dir string) ([]*CypherFile, []*CypherFile, error) {
-	var ups, downs []*CypherFile
+func (s *Scanner) scanUpDownTypeFolder(dir string) ([]*MigrationFile, []*MigrationFile, error) {
+	var ups, downs []*MigrationFile
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		switch {
 		case err != nil:
@@ -620,11 +366,10 @@ func (root Scanner) scanGraphModelFolder(dir string) ([]*CypherFile, []*CypherFi
 		}
 		match := coreCypher.FindStringSubmatch(info.Name())
 		if len(match) != len(coreCypher.SubexpNames()) {
-			return fmt.Errorf("file %s does not match with the name", path)
+			return fmt.Errorf("file '%s' has invalid name", path)
 		}
 
-		cf := &CypherFile{
-			kind: Model,
+		cf := &MigrationFile{
 			path: path,
 		}
 
@@ -636,7 +381,7 @@ func (root Scanner) scanGraphModelFolder(dir string) ([]*CypherFile, []*CypherFi
 					return err
 				}
 				if cf.commit == 0 {
-					return fmt.Errorf("forbidden number '0' at file %s", cf.path)
+					return fmt.Errorf("forbidden number '0' at file '%s'", cf.path)
 				}
 			case "direction":
 				if match[i] == "up" {

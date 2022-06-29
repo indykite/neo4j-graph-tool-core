@@ -323,7 +323,11 @@ func (c *Config) Normalize() error {
 			folder.NodeLabels = []string{DefaultNodeLabel, generateLabelName(folderName)}
 		}
 	}
-	c.Supervisor.LogLevel = strings.ToLower(c.Supervisor.LogLevel)
+
+	// Supervisor might not be defined
+	if c.Supervisor != nil {
+		c.Supervisor.LogLevel = strings.ToLower(c.Supervisor.LogLevel)
+	}
 
 	return nil
 }

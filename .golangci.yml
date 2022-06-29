@@ -88,6 +88,3 @@ issues:
         - linters:
               - revive
           text: exported (type|var|const).* should have comment .*or be unexported
-        # Remove this during planner and supervisor refactor
-        - path: planner
-          text: exported .* should have comment .*or be unexported
