@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -25,20 +26,36 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
-)
 
-type (
-	Planner func(ver *semver.Version, cf *CypherFile) (bool, error)
+	"github.com/indykite/neo4j-graph-tool-core/config"
 )
 
 var parseCmd = regexp.MustCompile(`\"[^\"]+\"|\S+`)
 
-func ParseGraphVersion(v string) (*GraphState, error) {
+type (
+	Planner struct {
+		config *config.Config
+	}
+	Builder func(folderName string, cf *MigrationFile, fileVer, writeVersion *GraphVersion) (bool, error)
+)
+
+// NewPlanner creates Planner instance and returns error if provided config is not valid.
+func NewPlanner(config *config.Config) (*Planner, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+	return &Planner{
+		config: config,
+	}, nil
+}
+
+// ParseGraphVersion parse string as semver version with revision
+func ParseGraphVersion(v string) (*GraphVersion, error) {
 	ver, err := semver.NewVersion(v)
 	if err != nil {
 		return nil, err
 	}
-	vs := &GraphState{Version: ver}
+	vs := &GraphVersion{Version: ver}
 	if ver.Metadata() != "" {
 		vs.Revision, err = strconv.ParseUint(ver.Metadata(), 10, 0)
 		if err != nil {
@@ -48,25 +65,34 @@ func ParseGraphVersion(v string) (*GraphState, error) {
 	return vs, nil
 }
 
-func (gv GraphVersions) Plan(model *GraphModel, target *GraphState, kind Kind, builder Planner) (*GraphState, error) {
+// Plan prepares execution plan with given builder
+func (p *Planner) Plan(
+	versionFolders VersionFolders,
+	dbModel DatabaseModel,
+	target *GraphVersion,
+	batch Batch,
+	builder Builder,
+) (*GraphVersion, error) {
+	schemaFolderVersion := dbModel[p.config.Planner.SchemaFolder.FolderName]
+
 	switch {
 	case target == nil || target.Version == nil:
 		// Upgrade
-		return gv.Upgrade(model, nil, 0, kind, builder)
-	case model == nil || model.Model == nil || model.Model.Version == nil ||
-		model.Model.Version.Compare(target.Version) < 0:
+		fallthrough
+	case schemaFolderVersion == nil || schemaFolderVersion.Version == nil ||
+		schemaFolderVersion.Version.Compare(target.Version) < 0:
 		// Upgrade
-		return gv.Upgrade(model, target.Version, target.Revision, kind, builder)
-	case model.Model.Version.Compare(target.Version) > 0:
+		return p.Upgrade(versionFolders, dbModel, target, batch, builder)
+	case schemaFolderVersion.Version.Compare(target.Version) > 0:
 		// Downgrade
-		return gv.Downgrade(model.Model, target.Version, target.Revision, builder)
+		return p.Downgrade(versionFolders, schemaFolderVersion, target.Version, target.Revision, builder)
 	default:
-		for _, v := range gv {
+		for _, v := range versionFolders {
 			if v.version.Equal(target.Version) {
-				max := v.downgrade[0].commit
-				if max < model.Model.Revision {
+				max := v.schemaFolder.down[0].commit
+				if max < schemaFolderVersion.Revision {
 					return nil, fmt.Errorf(
-						"unsupported file version. current: %d > max supported: %d", model.Model.Revision, max)
+						"unsupported file version. current: %d > max supported: %d", schemaFolderVersion.Revision, max)
 				}
 				if target.Revision != 0 && max < target.Revision {
 					return nil, fmt.Errorf(
@@ -74,48 +100,29 @@ func (gv GraphVersions) Plan(model *GraphModel, target *GraphState, kind Kind, b
 				} else if target.Revision == 0 {
 					target.Revision = max
 				}
-				if target.Revision < model.Model.Revision {
-					return gv.Downgrade(model.Model, target.Version, target.Revision, builder)
+				if target.Revision < schemaFolderVersion.Revision {
+					return p.Downgrade(versionFolders, schemaFolderVersion, target.Version, target.Revision, builder)
 				}
 				// Upgrade or Nothing to do
-				return gv.Upgrade(model, target.Version, target.Revision, kind, builder)
+				return p.Upgrade(versionFolders, dbModel, target, batch, builder)
 			}
 		}
 		return nil, fmt.Errorf("unsupported version - out of range: %v", target.Version)
 	}
 }
 
-func SetVersion(steps *ExecutionSteps, v *GraphState) {
-	steps.AddCypher(fmt.Sprintf("// Set Model Version - ver:%s rev:%d\n", v.Version, v.Revision))
-	// Version
-	steps.AddCypher(
-		":param version => '",
-		v.Version.String(),
-		"';\n")
-	// Revision
-	steps.AddCypher(
-		":param revision => ",
-		strconv.FormatUint(v.Revision, 10),
-		";\n",
-		`MERGE (sm:ModelVersion {version: $version}) SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();`,
-		"\n\n")
-}
-
-func CreatePlan(steps *ExecutionSteps, abs bool) Planner {
-	return func(ver *semver.Version, cf *CypherFile) (bool, error) {
+// CreateBuilder creates default Cypher builder
+func (p *Planner) CreateBuilder(steps *ExecutionSteps, abs bool) Builder {
+	return func(folderName string, cf *MigrationFile, fileVer, writeVersion *GraphVersion) (bool, error) {
 		header := "Importing"
-		if cf.fileType == Command {
+		switch {
+		case cf.fileType == Command:
 			header = "Running command for"
+		case fileVer.Compare(writeVersion) > 0:
+			header = "Running down of"
 		}
 
-		switch cf.kind {
-		case Data:
-			steps.AddCypher(fmt.Sprintf("// %s data - ver:%s rev:%d\n", header, ver, cf.commit))
-		case Perf:
-			steps.AddCypher(fmt.Sprintf("// %s perf - ver:%s rev:%d\n", header, ver, cf.commit))
-		case Model:
-			steps.AddCypher(fmt.Sprintf("// %s model - ver:%s rev:%d\n", header, ver, cf.commit))
-		}
+		steps.AddCypher(fmt.Sprintf("// %s folder %s - ver:%s\n", header, folderName, fileVer.String()))
 
 		if cf.fileType == Command {
 			if err := addCommand(steps, cf); err != nil {
@@ -136,30 +143,29 @@ func CreatePlan(steps *ExecutionSteps, abs bool) Planner {
 		}
 
 		// Version
-		steps.AddCypher(
-			":param version => '",
-			ver.String(),
-			"';\n")
+		steps.AddCypher(":param version => '", writeVersion.Version.String(), "';\n")
 		// Revision
-		steps.AddCypher(
-			":param revision => ",
-			strconv.FormatUint(cf.commit, 10),
-			";\n")
-		switch cf.kind {
-		case Data:
-			steps.AddCypher(`MERGE (sm:DataVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
-`)
-		case Model:
-			steps.AddCypher(`MERGE (sm:ModelVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
-`)
-		case Perf:
-			steps.AddCypher(`MERGE (sm:PerfVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
-`)
+		steps.AddCypher(":param revision => ", strconv.FormatUint(writeVersion.Revision, 10), ";\n")
+
+		var nodeLabels []string
+		if folderName == p.config.Planner.SchemaFolder.FolderName {
+			nodeLabels = p.config.Planner.SchemaFolder.NodeLabels
+		} else {
+			folder := p.config.Planner.Folders[folderName]
+			if folder != nil {
+				nodeLabels = folder.NodeLabels
+			}
 		}
-		steps.AddCypher("\n")
+
+		if len(nodeLabels) == 0 {
+			return false, fmt.Errorf("fail to import folder '%s', cannot determine DB labels", folderName)
+		}
+		steps.AddCypher(fmt.Sprintf(
+			"MERGE (sm:%s {version: $version})\nSET sm.file = $revision, sm.dirty = false, sm.ts = datetime();",
+			strings.Join(nodeLabels, ":"),
+		))
+
+		steps.AddCypher("\n\n")
 		return true, nil
 	}
 }
@@ -172,7 +178,7 @@ func parseArgs(line string) []string {
 	return args
 }
 
-func addCommand(steps *ExecutionSteps, cf *CypherFile) error {
+func addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
 	content, err := ioutil.ReadFile(cf.path)
 	if err != nil {
 		return err
@@ -214,37 +220,37 @@ func addCommand(steps *ExecutionSteps, cf *CypherFile) error {
 	return nil
 }
 
-const (
-	modelVersionCypher = `MATCH (sm:ModelVersion) RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
+const versionCypher = `MATCH (sm:%s) RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
 ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-	dataVersionCypher = `MATCH (sm:DataVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
-ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-	perfVersionCypher = `MATCH (sm:PerfVersion)   RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
-ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
-)
 
-func Version(driver neo4j.Driver) (*GraphModel, error) {
+// Version retrieves version of current state of DB
+func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	model, err := queryVersion(session, modelVersionCypher)
+	var err error
+
+	gp := make(DatabaseModel)
+	gp[p.config.Planner.SchemaFolder.FolderName], err = queryVersion(session, fmt.Sprintf(
+		versionCypher,
+		strings.Join(p.config.Planner.SchemaFolder.NodeLabels, ":"),
+	))
 	if err != nil {
 		return nil, err
 	}
-	data, err := queryVersion(session, dataVersionCypher)
-	if err != nil {
-		return nil, err
+
+	for folderName, folderDetail := range p.config.Planner.Folders {
+		gp[folderName], err = queryVersion(session, fmt.Sprintf(
+			versionCypher,
+			strings.Join(folderDetail.NodeLabels, ":"),
+		))
+		if err != nil {
+			return nil, err
+		}
 	}
-	perf, err := queryVersion(session, perfVersionCypher)
-	if err != nil {
-		return nil, err
-	}
-	return &GraphModel{
-		Model: model,
-		Data:  data,
-		Perf:  perf,
-	}, nil
+
+	return gp, nil
 }
 
-func queryVersion(session neo4j.Session, cypher string) (*GraphState, error) {
+func queryVersion(session neo4j.Session, cypher string) (*GraphVersion, error) {
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
 		result, err := tx.Run(cypher, nil)
 		if err != nil {
@@ -256,7 +262,7 @@ func queryVersion(session neo4j.Session, cypher string) (*GraphState, error) {
 			}
 			record := result.Record()
 
-			gs := new(GraphState)
+			gs := new(GraphVersion)
 
 			for i, name := range record.Keys {
 				switch name {
@@ -276,15 +282,6 @@ func queryVersion(session neo4j.Session, cypher string) (*GraphState, error) {
 						return nil, fmt.Errorf("invalid rev filed from the response")
 					}
 					gs.Revision = uint64(v)
-				case "dirty":
-					switch v := record.Values[i].(type) {
-					case bool:
-						_ = v
-					case nil:
-
-					default:
-						return nil, fmt.Errorf("invalid dirty filed from the response")
-					}
 				}
 			}
 			return gs, nil
@@ -297,6 +294,266 @@ func queryVersion(session neo4j.Session, cypher string) (*GraphState, error) {
 	if result == nil {
 		return nil, nil
 	}
-	mr := result.(*GraphState)
+	mr := result.(*GraphVersion)
 	return mr, nil
+}
+
+// Upgrade creates plan for upgrading
+func (p *Planner) Upgrade(
+	versionFolders VersionFolders,
+	dbModel DatabaseModel,
+	target *GraphVersion,
+	batch Batch,
+	op Builder,
+) (*GraphVersion, error) {
+	var (
+		err     error
+		highVer *semver.Version
+		hRev    uint64
+	)
+	if target != nil {
+		highVer = target.Version
+		hRev = target.Revision
+	}
+
+	type orderedVersion struct {
+		folderName string
+		version    *GraphVersion
+	}
+
+	versions := []orderedVersion{}
+
+	// Init base schema
+	schemaVersion := &GraphVersion{}
+	if dbm := dbModel[p.config.Planner.SchemaFolder.FolderName]; dbm != nil {
+		schemaVersion.Version = dbm.Version
+		schemaVersion.Revision = dbm.Revision
+	}
+	schemaVersion.Version, highVer, err = versionFolders.verifyRange(schemaVersion.Version, highVer)
+	if err != nil {
+		return nil, err
+	}
+
+	batchFolders, hasBatch := p.config.Planner.Batches[string(batch)]
+	if !hasBatch {
+		return nil, errors.New("unknown batch name '" + string(batch) + "'")
+	}
+
+	for _, folderName := range batchFolders.Folders {
+		gv := &GraphVersion{}
+		versions = append(versions, orderedVersion{
+			folderName: folderName,
+			version:    gv,
+		})
+		if lgv := dbModel[folderName]; lgv != nil {
+			gv.Version = lgv.Version
+			gv.Revision = lgv.Revision
+		}
+
+		gv.Version, highVer, err = versionFolders.verifyRange(gv.Version, highVer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	changed := false
+
+	for _, vv := range versionFolders {
+		if vv.version.GreaterThan(highVer) {
+			break
+		}
+		if vv.version.LessThan(schemaVersion.Version) {
+			continue
+		}
+		var start, stop uint64 = 0, math.MaxUint64
+		if vv.version.Equal(schemaVersion.Version) && schemaVersion.Revision != 0 {
+			start = schemaVersion.Revision
+		}
+		if vv.version.Equal(highVer) && hRev != 0 {
+			stop = hRev
+		}
+		for _, v := range vv.schemaFolder.up {
+			if start >= v.commit {
+				continue
+			}
+			if stop < v.commit {
+				break
+			}
+			var b bool
+			fileVer := &GraphVersion{
+				Version:  vv.version,
+				Revision: v.commit,
+			}
+			// For Upgrade the current file version and write version is the same
+			b, err = op(p.config.Planner.SchemaFolder.FolderName, v, fileVer, fileVer)
+			if err != nil {
+				return nil, err
+			}
+			changed = changed || b
+		}
+
+		for _, ver := range versions {
+			if !vv.version.LessThan(ver.version.Version) {
+				var start uint64
+				if vv.version.Equal(ver.version.Version) && ver.version.Revision != 0 {
+					start = ver.version.Revision
+				} else {
+					start = 0
+				}
+
+				fs := vv.extraFolders[ver.folderName]
+				// When cannot find folder, it might not be defined for current version. Skip that one
+				if fs == nil {
+					continue
+				}
+				for _, v := range fs.up {
+					if start >= v.commit {
+						continue
+					}
+					var b bool
+					fileVer := &GraphVersion{
+						Version:  vv.version,
+						Revision: v.commit,
+					}
+					// For Upgrade the current file version and write version is the same
+					b, err = op(ver.folderName, v, fileVer, fileVer)
+					if err != nil {
+						return nil, err
+					}
+					changed = changed || b
+				}
+			}
+		}
+	}
+	if changed {
+		return &GraphVersion{Version: highVer}, err
+	}
+	return nil, nil
+}
+
+// Downgrade creates plan for downgrading
+func (p *Planner) Downgrade(
+	versionFolders VersionFolders,
+	high *GraphVersion,
+	low *semver.Version, // Pass as single argument when supporting downgrade for all folders
+	hRev uint64,
+	op Builder,
+) (*GraphVersion, error) {
+	var err error
+	if low == nil {
+		low = versionFolders[0].version
+	}
+	var highVer *semver.Version
+	var highRev uint64
+	if high != nil && high.Version != nil {
+		highVer = high.Version
+		highRev = high.Revision
+	}
+	low, highVer, err = versionFolders.verifyRange(low, highVer)
+	if err != nil {
+		return nil, err
+	}
+
+	changed := false
+	for i := len(versionFolders) - 1; i >= 0; i-- {
+		vv := versionFolders[i]
+		if vv.version.GreaterThan(highVer) {
+			continue
+		}
+		if max := vv.schemaFolder.down[0].commit; vv.version.Equal(highVer) && highRev > max {
+			return nil, fmt.Errorf(
+				"out of range: can't downgrade ver %s from %d only from %d", vv.version, highRev, max)
+		}
+		if vv.version.Equal(low) {
+			switch {
+			case changed && hRev == 0:
+				return &GraphVersion{
+					Version:  vv.version,
+					Revision: vv.schemaFolder.down[0].commit,
+				}, nil
+			case hRev == 0:
+				// empty operations
+				return nil, nil
+			default:
+				after := &GraphVersion{
+					Version:  vv.version,
+					Revision: vv.schemaFolder.down[0].commit,
+				}
+				for downI, v := range vv.schemaFolder.down[:len(vv.schemaFolder.down)-1] {
+					if v.commit <= hRev {
+						break
+					}
+					var b bool
+					fileVer := &GraphVersion{
+						Version:  vv.version,
+						Revision: v.commit,
+					}
+					// For Downgrade the current file version is different than write version.
+					// Which is actually next file version, as current version is removed from DB.
+					b, err = op(
+						p.config.Planner.SchemaFolder.FolderName,
+						v,
+						fileVer,
+						getNextDownVersion(versionFolders, i, downI),
+					)
+					if err != nil {
+						return nil, err
+					}
+					changed = changed || b
+					if changed {
+						after.Revision = vv.schemaFolder.down[downI+1].commit
+					}
+				}
+				if changed {
+					return after, err
+				}
+				return nil, nil
+			}
+		}
+		var limit uint64 = math.MaxUint64
+		if vv.version.Equal(highVer) && highRev != 0 {
+			limit = highRev
+		}
+		for downI, v := range vv.schemaFolder.down {
+			if v.commit > limit {
+				continue
+			}
+
+			fileVer := &GraphVersion{
+				Version:  vv.version,
+				Revision: v.commit,
+			}
+			// For Downgrade the current file version is different than write version.
+			// Which is actually next file version, as current version is removed from DB.
+			b, err := op(
+				p.config.Planner.SchemaFolder.FolderName,
+				v,
+				fileVer,
+				getNextDownVersion(versionFolders, i, downI),
+			)
+			if err != nil {
+				return nil, err
+			}
+			changed = changed || b
+		}
+	}
+	return nil, nil
+}
+
+func getNextDownVersion(vf VersionFolders, vfIndex, fileIndex int) *GraphVersion {
+	fileIndex++
+	if fileIndex < len(vf[vfIndex].schemaFolder.down) {
+		return &GraphVersion{
+			Version:  vf[vfIndex].version,
+			Revision: vf[vfIndex].schemaFolder.down[fileIndex].commit,
+		}
+	}
+
+	vfIndex--
+	fileIndex = 0
+
+	return &GraphVersion{
+		Version:  vf[vfIndex].version,
+		Revision: vf[fileIndex].schemaFolder.down[0].commit,
+	}
 }

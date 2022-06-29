@@ -339,15 +339,15 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 }
 
 // RefreshData imports all data from schema import folder
-func (w *Neo4jWrapper) RefreshData(target *planner.GraphState, dryRun, clean bool, kind planner.Kind) error {
-	err := w.update(target, dryRun, clean, kind)
+func (w *Neo4jWrapper) RefreshData(target *planner.GraphVersion, dryRun, clean bool, batchName planner.Batch) error {
+	err := w.update(target, dryRun, clean, batchName)
 	if err != nil {
 		return fmt.Errorf("importing data failed: %v", err)
 	}
 	return nil
 }
 
-func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, kind planner.Kind) error {
+func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, batchName planner.Batch) error {
 	state, err := w.State()
 	if err != nil {
 		return err
@@ -355,8 +355,10 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 		return fmt.Errorf("cannot run import when service is '%s', must be running", w.serviceState)
 	}
 
-	var model *planner.GraphModel
+	// We already validated config before
+	p, _ := planner.NewPlanner(w.cfg)
 
+	var dbModel planner.DatabaseModel
 	if !clean {
 		var d neo4j.Driver
 		d, err = w.Driver()
@@ -364,29 +366,20 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 			return err
 		}
 		defer func() { _ = d.Close() }()
-		model, err = planner.Version(d)
+		dbModel, err = p.Version(d)
 		if err != nil {
 			return err
 		}
 	}
 
-	t, err := planner.NewScanner(w.getImportDir())
+	scanner, err := p.NewScanner(w.getImportDir())
 	if err != nil {
 		return err
 	}
-	v, err := t.ScanGraphModel()
+	vf, err := scanner.ScanFolders()
 	if err != nil {
 		return err
 	}
-	v, err = t.ScanData(v)
-	if err != nil {
-		return err
-	}
-	v, err = t.ScanPerfData(v)
-	if err != nil {
-		return err
-	}
-
 	execSteps := new(planner.ExecutionSteps)
 	if clean {
 		if err = w.drop(execSteps); err != nil {
@@ -394,13 +387,9 @@ func (w *Neo4jWrapper) update(target *planner.GraphState, dryRun, clean bool, ki
 		}
 	}
 
-	changed, err := v.Plan(model, target, kind, planner.CreatePlan(execSteps, true))
+	changed, err := p.Plan(vf, dbModel, target, batchName, p.CreateBuilder(execSteps, true))
 	if err != nil {
 		return err
-	}
-	if changed != nil && model != nil && changed.Compare(model.Model) < 0 {
-		// It's a downgrade
-		planner.SetVersion(execSteps, changed)
 	}
 
 	if dryRun && changed != nil {
