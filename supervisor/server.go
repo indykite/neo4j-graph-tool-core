@@ -30,23 +30,23 @@ type httpServer struct {
 	log, httpLog logrus.FieldLogger
 	srv          *http.Server
 
-	defaultTarget *planner.GraphState
-	defaultKind   planner.Kind
+	defaultTarget *planner.GraphVersion
+	defaultBatch  planner.Batch
 }
 
 func runHTTPServer(
 	ctx context.Context,
 	neo4j *Neo4jWrapper,
 	logger logrus.FieldLogger,
-	target *planner.GraphState,
-	kind planner.Kind,
+	target *planner.GraphVersion,
+	batch planner.Batch,
 ) *httpServer {
 	s := &httpServer{
 		neo4j:         neo4j,
 		log:           logger,
 		httpLog:       logger.WithField(ComponentLogKey, "http"),
 		defaultTarget: target,
-		defaultKind:   kind,
+		defaultBatch:  batch,
 	}
 
 	// Prepare HTTP server routes
@@ -149,10 +149,9 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 			dryRun = true
 		}
 
-		loadBatch := s.defaultKind
+		loadBatch := s.defaultBatch
 		if v, ok := c.GetQuery("batch"); ok {
-			_ = v
-			// loadBatch = v
+			loadBatch = planner.Batch(v)
 		}
 		if err := s.neo4j.RefreshData(gs, dryRun, clean, loadBatch); err == nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -166,13 +165,15 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 }
 
 func (s *httpServer) versionHandler(c *gin.Context) {
+	// config is validated in supervisor
+	p, _ := planner.NewPlanner(s.neo4j.cfg)
 	driver, err := s.neo4j.Driver()
 	if err != nil {
 		s.sendError(c, err)
 		return
 	}
 	defer func() { _ = driver.Close() }()
-	model, err := planner.Version(driver)
+	model, err := p.Version(driver)
 	if err != nil {
 		s.sendError(c, err)
 		return
@@ -188,7 +189,7 @@ func (s *httpServer) sendError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"status": http.StatusInternalServerError, "error": err.Error()})
 }
 
-func (s *httpServer) parseTargetParams(c *gin.Context) (*planner.GraphState, error) {
+func (s *httpServer) parseTargetParams(c *gin.Context) (*planner.GraphVersion, error) {
 	version := c.Param("version")
 	if version == "" {
 		return s.defaultTarget, nil

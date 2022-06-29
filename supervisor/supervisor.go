@@ -38,8 +38,8 @@ type supervisor struct {
 	log        logrus.FieldLogger
 	httpServer *httpServer
 
-	schemaVersion *planner.GraphState
-	initialBatch  planner.Kind
+	schemaVersion *planner.GraphVersion
+	initialBatch  planner.Batch
 }
 
 // Start the HTTP Supervisor server, Neo4j DB and load initial data.
@@ -72,7 +72,7 @@ func Start(cfg *config.Config) error {
 		neo4j:     neo4j,
 	}
 
-	if err = s.loadKindTargets(); err != nil {
+	if err = s.loadBatchTarget(); err != nil {
 		return err
 	}
 
@@ -89,7 +89,7 @@ func Start(cfg *config.Config) error {
 	return nil
 }
 
-func (s *supervisor) loadKindTargets() error {
+func (s *supervisor) loadBatchTarget() error {
 	var err error
 
 	if v := s.cfg.Supervisor.GraphVersion; v != "" {
@@ -102,8 +102,7 @@ func (s *supervisor) loadKindTargets() error {
 		s.log.Warn("Target GraphModel is not set")
 	}
 
-	// TODO: here
-	// s.kind = s.cfg.Supervisor.InitialBatch
+	s.initialBatch = planner.Batch(s.cfg.Supervisor.InitialBatch)
 	s.log.WithField("batch", s.cfg.Supervisor.InitialBatch).Info("Initial batch is set")
 
 	return nil

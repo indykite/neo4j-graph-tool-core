@@ -19,191 +19,255 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/planner"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
+type builderOperation struct {
+	filename     string
+	fileVersion  string
+	writeVersion string
+}
+
+func newBuilderOp(filename, fileVersion, writeVersion string) builderOperation {
+	return builderOperation{
+		filename:     filename,
+		fileVersion:  fileVersion,
+		writeVersion: writeVersion,
+	}
+}
+
 var _ = Describe("Scanner Errors", func() {
-	It("Invalid folder", func() {
-		_, err := planner.NewScanner("testdata/none")
-		Ω(err).To(HaveOccurred())
+	var p *planner.Planner
+	BeforeEach(func() {
+		c, err := config.New()
+		Expect(err).To(Succeed())
+
+		p, err = planner.NewPlanner(c)
+		Expect(err).To(Succeed())
 	})
+
+	It("Invalid folder", func() {
+		_, err := p.NewScanner("testdata/none")
+		Expect(err).To(MatchError(ContainSubstring("directory not exists: 'testdata/none'")))
+	})
+
 	It("Not a folder", func() {
-		_, err := planner.NewScanner("../planner/scanner.go")
-		Ω(err).To(HaveOccurred())
+		_, err := p.NewScanner("scanner_test.go")
+		Expect(err).To(MatchError(ContainSubstring("scanner must point to a directory 'scanner_test.go'")))
+	})
+
+	It("Invalid Dir content", func() {
+		t, err := p.NewScanner("testdata/case01")
+		Expect(err).To(Succeed())
+		_, err = t.ScanFolders()
+		Expect(err).To(MatchError(
+			"inconsistent state: missing down part of 'testdata/case01/schema/v1.0.1/02_up_contract.cypher'",
+		))
+
+		t, err = p.NewScanner("testdata/case02")
+		Expect(err).To(Succeed())
+		_, err = t.ScanFolders()
+		Expect(err).To(MatchError("file 'testdata/case02/schema/v1.0.1/-1_up_plan.cypher' has invalid name"))
+
+		t, err = p.NewScanner("testdata/case03")
+		Expect(err).To(Succeed())
+		_, err = t.ScanFolders()
+		Expect(err).To(MatchError("forbidden number '0' at file 'testdata/case03/schema/v1.0.1/00_up_plan.cypher'"))
 	})
 })
 
 var _ = Describe("Scanner", func() {
-
-	var v planner.GraphVersions
+	var (
+		vf planner.VersionFolders
+		p  *planner.Planner
+	)
 
 	BeforeEach(func() {
-		t, err := planner.NewScanner("testdata/import")
-		Ω(err).To(Succeed())
-		v, err = t.ScanGraphModel()
-		Ω(err).To(Succeed())
-		v, err = t.ScanData(v)
-		Ω(err).To(Succeed())
-		v, err = t.ScanPerfData(v)
-		Ω(err).To(Succeed())
-		Ω(v).To(HaveLen(3))
+		c := &config.Config{Planner: &config.Planner{
+			BaseFolder:   "import",
+			SchemaFolder: &config.SchemaFolder{FolderName: "schema", MigrationType: config.DefaultSchemaMigrationType},
+			Folders: map[string]*config.FolderDetail{
+				"data": {MigrationType: config.DefaultFolderMigrationType, NodeLabels: []string{"DataVersion"}},
+				"perf": {MigrationType: config.DefaultFolderMigrationType},
+			},
+			Batches: map[string]*config.BatchDetail{
+				"seed":      {Folders: []string{"data"}},
+				"perf-seed": {Folders: []string{"data", "perf"}},
+			},
+		}}
+		err := c.Normalize()
+		Expect(err).To(Succeed())
+
+		p, err = planner.NewPlanner(c)
+		Expect(err).To(Succeed())
+
+		s, err := p.NewScanner("testdata/import")
+		Expect(err).To(Succeed())
+
+		vf, err = s.ScanFolders()
+		Expect(err).To(Succeed())
+		Expect(vf).To(HaveLen(3))
 	})
 
 	It("Error case", func() {
-		ver, _ := planner.ParseGraphModel("v0.1.0", "", "")
-		_, err := v.Upgrade(ver, nil, 0, planner.Perf, nil)
-		Ω(err).To(MatchError(MatchRegexp("out of range min")))
+		dbSchemaVersion, err := planner.ParseGraphVersion("v0.1.0")
+		Expect(err).To(Succeed())
+		dbModel := planner.DatabaseModel{"schema": dbSchemaVersion}
 
-		nv, err := v.Upgrade(nil, ver.Model.Version, 0, planner.Perf, nil)
-		Ω(nv).To(BeNil())
-		Ω(err).To(Succeed())
+		_, err = p.Upgrade(vf, dbModel, nil, "not-checked", nil)
+		Expect(err).To(MatchError("out of range min:&1.0.0 low:0.1.0"))
 
-		ver, _ = planner.ParseGraphModel("v2.0.0", "", "")
-		_, err = v.Upgrade(ver, nil, 0, planner.Perf, nil)
-		Ω(err).To(MatchError(MatchRegexp("invalid range low:2.0.0 > high:1.0.2")))
+		nv, err := p.Upgrade(vf, nil, dbSchemaVersion, "perf-seed", nil)
+		Expect(nv).To(BeNil())
+		Expect(err).To(Succeed())
 
-		_, err = v.Upgrade(nil, ver.Model.Version, 0, planner.Perf, nil)
-		Ω(err).To(MatchError(MatchRegexp("out of range max")))
+		dbSchemaVersion, err = planner.ParseGraphVersion("v2.0.0")
+		Expect(err).To(Succeed())
+		dbModel = planner.DatabaseModel{"schema": dbSchemaVersion}
 
-		ver, _ = planner.ParseGraphModel("1.0.2+4", "", "")
-		_, err = v.Downgrade(ver.Model, nil, 0, nil)
-		Ω(err).To(MatchError(MatchRegexp("out of range: can't downgrade ver 1.0.2 from 4 only from 3")))
-	})
+		_, err = p.Upgrade(vf, dbModel, nil, "perf", nil)
+		Expect(err).To(MatchError(MatchRegexp("invalid range low:2.0.0 > high:1.0.2")))
 
-	It("Invalid Dir content ", func() {
-		t, err := planner.NewScanner("testdata/case01")
-		Ω(err).To(Succeed())
-		v, err = t.ScanGraphModel()
-		Ω(err).To(MatchError(MatchRegexp("missing down part of")))
-		t, err = planner.NewScanner("testdata/case02")
-		Ω(err).To(Succeed())
-		v, err = t.ScanGraphModel()
-		Ω(err).To(MatchError(MatchRegexp("does not match with the name")))
-		t, err = planner.NewScanner("testdata/case03")
-		Ω(err).To(Succeed())
-		v, err = t.ScanGraphModel()
-		Ω(err).To(MatchError(MatchRegexp("forbidden number '0'")))
+		_, err = p.Upgrade(vf, nil, dbSchemaVersion, "not-checked", nil)
+		Expect(err).To(MatchError("out of range max:1.0.2 high:2.0.0"))
+
+		dbSchemaVersion, err = planner.ParseGraphVersion("v1.0.2+4")
+		Expect(err).To(Succeed())
+		_, err = p.Downgrade(vf, dbSchemaVersion, nil, 0, nil)
+		Expect(err).To(MatchError(MatchRegexp("out of range: can't downgrade ver 1.0.2 from 4 only from 3")))
 	})
 
 	DescribeTable("Upgrade",
-		func(model, data, perf, target string, expected []string) {
-			current, err := planner.ParseGraphModel(model, data, perf)
-			Ω(err).To(Succeed())
+		func(model, data, perf, target string, expected []builderOperation) {
+			var err error
+			dbModel := planner.DatabaseModel{}
 
-			var tVer *semver.Version
-			var tRev uint64
-			if target != "" {
-				var to *planner.GraphState
-				to, err = planner.ParseGraphVersion(target)
-				Ω(err).To(Succeed())
-				tVer = to.Version
-				tRev = to.Revision
+			if model != "" {
+				dbModel["schema"], err = planner.ParseGraphVersion(model)
+				Expect(err).To(Succeed())
 			}
-			var ops []string
-			changed, err := v.Upgrade(current, tVer, tRev,
-				planner.Perf,
-				func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-					_, _ = fmt.Fprintf(GinkgoWriter, "ver:%s -> op: %s\n", ver, cf)
-					ops = append(ops, cf.FilePath())
+			if data != "" {
+				dbModel["data"], err = planner.ParseGraphVersion(data)
+				Expect(err).To(Succeed())
+			}
+			if perf != "" {
+				dbModel["perf"], err = planner.ParseGraphVersion(perf)
+				Expect(err).To(Succeed())
+			}
+
+			var to *planner.GraphVersion
+			if target != "" {
+				to, err = planner.ParseGraphVersion(target)
+				Expect(err).To(Succeed())
+			}
+
+			var ops []builderOperation
+
+			changed, err := p.Upgrade(vf, dbModel, to, "perf-seed",
+				func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+					_, _ = fmt.Fprintf(GinkgoWriter,
+						"'%s' (%s) -> folder '%s' file: '%s'\n", fileVer, writeVer, folder, cf.FilePath())
+					ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 					return true, nil
 				})
-			Ω(err).To(Succeed())
-			Ω(changed).To(Not(BeNil()))
-			Ω(ops).To(Equal(expected))
+			Expect(err).To(Succeed())
+			Expect(changed).To(Not(BeNil()))
+			Expect(ops).To(Equal(expected))
 		},
-		Entry("Full", "", "", "", "", []string{
-			"testdata/import/schema/v1.0.0/01_up_core.cypher",
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/data/v1.0.0/01_test.cypher",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Entry("Full", "", "", "", "", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
-		Entry("From v1.0.0-1", "1.0.0+01", "1.0.0+01", "", "", []string{
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Entry("From v1.0.0-1", "1.0.0+01", "1.0.0+01", "", "", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
-		Entry("From v1.0.0-1 Data v1.0.1-1", "1.0.0+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []string{
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
-		}),
-
-		Entry("From Data v1.0.0-1", "", "1.0.0+01", "", "", []string{
-			"testdata/import/schema/v1.0.0/01_up_core.cypher",
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Entry("From v1.0.0-1 Data v1.0.1-1", "1.0.0+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
 
-		Entry("To v1.0.1", "", "", "", "1.0.1", []string{
-			"testdata/import/schema/v1.0.0/01_up_core.cypher",
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/data/v1.0.0/01_test.cypher",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
+		Entry("From Data v1.0.0-1", "", "1.0.0+01", "", "", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
 
-		Entry("From v1.0.1-1 to v1.0.2-2", "1.0.1+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []string{
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Entry("To v1.0.1", "", "", "", "1.0.1", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+		}),
+
+		Entry("From v1.0.1-1 to v1.0.2-2", "1.0.1+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
 	)
 
 	DescribeTable("Downgrade",
-		func(from, to string, expected []string, after string) {
-			var high, low, expVer *planner.GraphState
+		func(from, to string, expected []builderOperation, after string) {
+			var high, low, expVer *planner.GraphVersion
 			var lowVer *semver.Version
 			var lowRev uint64
 			var err error
@@ -223,11 +287,12 @@ var _ = Describe("Scanner", func() {
 				Ω(err).To(Succeed())
 			}
 
-			var ops []string
-			changed, err := v.Downgrade(high, lowVer, lowRev,
-				func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-					_, _ = fmt.Fprintf(GinkgoWriter, "ver:%s -> op: %s\n", ver, cf)
-					ops = append(ops, cf.FilePath())
+			var ops []builderOperation
+			changed, err := p.Downgrade(vf, high, lowVer, lowRev,
+				func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+					_, _ = fmt.Fprintf(GinkgoWriter,
+						"'%s' (%s) -> folder '%s' file: '%s'\n", fileVer, writeVer, folder, cf.FilePath())
+					ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 					return true, nil
 				})
 			Ω(err).To(Succeed())
@@ -238,92 +303,92 @@ var _ = Describe("Scanner", func() {
 			}
 			Ω(ops).To(Equal(expected))
 		},
-		Entry("Full", "", "", []string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
-			"testdata/import/schema/v1.0.2/02_down_session.cypher",
-			"testdata/import/schema/v1.0.2/01_down_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_down_contract.cypher",
-			"testdata/import/schema/v1.0.1/01_down_plan.cypher",
+		Entry("Full", "", "", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_down_session.cypher", "1.0.2+02", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_down_plan.cypher", "1.0.2+01", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_down_contract.run", "1.0.1+02", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_down_plan.cypher", "1.0.1+01", "1.0.0+02"),
 		}, "1.0.0+2"),
 
-		Entry("Down from v1.0.1-1 to v1.0.0-02", "1.0.1+01", "1.0.0+02", []string{
-			"testdata/import/schema/v1.0.1/01_down_plan.cypher",
+		Entry("Down from v1.0.1-1 to v1.0.0-02", "1.0.1+01", "1.0.0+02", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.1/01_down_plan.cypher", "1.0.1+01", "1.0.0+02"),
 		}, "1.0.0+2"),
 
-		Entry("Down to v1.0.1-1", "", "1.0.1+01", []string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
-			"testdata/import/schema/v1.0.2/02_down_session.cypher",
-			"testdata/import/schema/v1.0.2/01_down_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_down_contract.cypher",
+		Entry("Down to v1.0.1-1", "", "1.0.1+01", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_down_session.cypher", "1.0.2+02", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_down_plan.cypher", "1.0.2+01", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_down_contract.run", "1.0.1+02", "1.0.1+01"),
 		}, "1.0.1+1"),
 
-		Entry("Down from v1.0.2-2 to v1.0.1-1", "1.0.2+02", "1.0.1+01", []string{
-			"testdata/import/schema/v1.0.2/02_down_session.cypher",
-			"testdata/import/schema/v1.0.2/01_down_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_down_contract.cypher",
+		Entry("Down from v1.0.2-2 to v1.0.1-1", "1.0.2+02", "1.0.1+01", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/02_down_session.cypher", "1.0.2+02", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_down_plan.cypher", "1.0.2+01", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_down_contract.run", "1.0.1+02", "1.0.1+01"),
 		}, "1.0.1+1"),
 
-		Entry("Down from v1.0.2-3 to v1.0.2-2", "1.0.2+03", "1.0.2+02", []string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
+		Entry("Down from v1.0.2-3 to v1.0.2-2", "1.0.2+03", "1.0.2+02", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
 		}, "1.0.2+2"),
 	)
 
 	It("Create Upgrade plan", func() {
 		buf := new(planner.ExecutionSteps)
-		changed, err := v.Upgrade(nil, nil, 0, planner.Perf, planner.CreatePlan(buf, false))
+		changed, err := p.Upgrade(vf, nil, nil, "perf-seed", p.CreateBuilder(buf, false))
 		Ω(err).To(Succeed())
 		Ω(changed).To(Not(BeNil()))
 		plan := buf.String()
-		Ω(plan).To(Equal(`// Importing model - ver:1.0.0 rev:1
+		Ω(plan).To(Equal(`// Importing folder schema - ver:1.0.0+01
 :source testdata/import/schema/v1.0.0/01_up_core.cypher;
 :param version => '1.0.0';
 :param revision => 1;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Running command for model - ver:1.0.0 rev:2
+// Running command for folder schema - ver:1.0.0+02
 >>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
 :param version => '1.0.0';
 :param revision => 2;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing data - ver:1.0.0 rev:1
+// Importing folder data - ver:1.0.0+01
 :source testdata/import/data/v1.0.0/01_test.cypher;
 :param version => '1.0.0';
 :param revision => 1;
 MERGE (sm:DataVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing model - ver:1.0.1 rev:1
+// Importing folder schema - ver:1.0.1+01
 :source testdata/import/schema/v1.0.1/01_up_plan.cypher;
 :param version => '1.0.1';
 :param revision => 1;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing model - ver:1.0.1 rev:2
+// Importing folder schema - ver:1.0.1+02
 :source testdata/import/schema/v1.0.1/02_up_contract.cypher;
 :param version => '1.0.1';
 :param revision => 2;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing data - ver:1.0.1 rev:1
+// Importing folder data - ver:1.0.1+01
 :source testdata/import/data/v1.0.1/01_plans.cypher;
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:DataVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing data - ver:1.0.1 rev:2
+// Importing folder data - ver:1.0.1+02
 :source testdata/import/data/v1.0.1/02_contracts.cypher;
 :param version => '1.0.1';
 :param revision => 2;
 MERGE (sm:DataVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Running command for data - ver:1.0.1 rev:3
+// Running command for folder data - ver:1.0.1+03
 >>> graph-tool abc -n 456 --address ***** --username ***** --password *****
 >>> graph-tool jkl --address ***** --username ***** --password *****
 :param version => '1.0.1';
@@ -331,53 +396,102 @@ SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 MERGE (sm:DataVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing perf - ver:1.0.1 rev:1
+// Importing folder perf - ver:1.0.1+01
 :source testdata/import/perf/v1.0.1/01_plansx1000.cypher;
 :param version => '1.0.1';
 :param revision => 1;
-MERGE (sm:PerfVersion {version: $version})
+MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing perf - ver:1.0.1 rev:2
+// Importing folder perf - ver:1.0.1+02
 :source testdata/import/perf/v1.0.1/02_contracts_2000.cypher;
 :param version => '1.0.1';
 :param revision => 2;
-MERGE (sm:PerfVersion {version: $version})
+MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing model - ver:1.0.2 rev:1
+// Importing folder schema - ver:1.0.2+01
 :source testdata/import/schema/v1.0.2/01_up_plan.cypher;
 :param version => '1.0.2';
 :param revision => 1;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing model - ver:1.0.2 rev:2
+// Importing folder schema - ver:1.0.2+02
 :source testdata/import/schema/v1.0.2/02_up_session.cypher;
 :param version => '1.0.2';
 :param revision => 2;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing model - ver:1.0.2 rev:3
+// Importing folder schema - ver:1.0.2+03
 :source testdata/import/schema/v1.0.2/03_up_test.cypher;
 :param version => '1.0.2';
 :param revision => 3;
-MERGE (sm:ModelVersion {version: $version})
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Importing perf - ver:1.0.2 rev:1
+// Importing folder perf - ver:1.0.2+01
 :source testdata/import/perf/v1.0.2/01_p100.cypher;
 :param version => '1.0.2';
 :param revision => 1;
-MERGE (sm:PerfVersion {version: $version})
+MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
-// Running command for perf - ver:1.0.2 rev:2
+// Running command for folder perf - ver:1.0.2+02
 // Nothing to do in this file
 :param version => '1.0.2';
 :param revision => 2;
-MERGE (sm:PerfVersion {version: $version})
+MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
+SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+
+`))
+	})
+
+	It("Create Downgrade plan", func() {
+		buf := new(planner.ExecutionSteps)
+		// "1.0.1+01", "1.0.0+02"
+		dbModel := &planner.GraphVersion{
+			Version:  v102,
+			Revision: 2,
+		}
+		changed, err := p.Downgrade(vf, dbModel, v100, 1, p.CreateBuilder(buf, false))
+		Ω(err).To(Succeed())
+		Ω(changed).To(Not(BeNil()))
+		plan := buf.String()
+		Ω(plan).To(Equal(`// Running down of folder schema - ver:1.0.2+02
+:source testdata/import/schema/v1.0.2/02_down_session.cypher;
+:param version => '1.0.2';
+:param revision => 1;
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
+SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+
+// Running down of folder schema - ver:1.0.2+01
+:source testdata/import/schema/v1.0.2/01_down_plan.cypher;
+:param version => '1.0.1';
+:param revision => 2;
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
+SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+
+// Running command for folder schema - ver:1.0.1+02
+>>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
+:param version => '1.0.1';
+:param revision => 1;
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
+SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+
+// Running down of folder schema - ver:1.0.1+01
+:source testdata/import/schema/v1.0.1/01_down_plan.cypher;
+:param version => '1.0.0';
+:param revision => 2;
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
+SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+
+// Running down of folder schema - ver:1.0.0+02
+:source testdata/import/schema/v1.0.0/02_down_test_cmd.cypher;
+:param version => '1.0.0';
+:param revision => 1;
+MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 
 `))

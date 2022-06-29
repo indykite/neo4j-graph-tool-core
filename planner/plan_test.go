@@ -17,6 +17,7 @@ package planner_test
 import (
 	"github.com/Masterminds/semver/v3"
 
+	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/planner"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,30 +32,49 @@ var (
 )
 
 var _ = Describe("Plan", func() {
-	var v planner.GraphVersions
+	var (
+		vf planner.VersionFolders
+		p  *planner.Planner
+	)
 
 	BeforeEach(func() {
-		t, err := planner.NewScanner("testdata/import")
-		Ω(err).To(Succeed())
-		v, err = t.ScanGraphModel()
-		Ω(err).To(Succeed())
-		v, err = t.ScanData(v)
-		Ω(err).To(Succeed())
-		v, err = t.ScanPerfData(v)
-		Ω(err).To(Succeed())
-		Ω(v).To(HaveLen(3))
+		c := &config.Config{Planner: &config.Planner{
+			BaseFolder:   "import",
+			SchemaFolder: &config.SchemaFolder{FolderName: "schema", MigrationType: config.DefaultSchemaMigrationType},
+			Folders: map[string]*config.FolderDetail{
+				"data": {MigrationType: config.DefaultFolderMigrationType, NodeLabels: []string{"DataVersion"}},
+				"perf": {MigrationType: config.DefaultFolderMigrationType},
+			},
+			Batches: map[string]*config.BatchDetail{
+				"seed":      {Folders: []string{"data"}},
+				"perf-seed": {Folders: []string{"data", "perf"}},
+			},
+		}}
+		err := c.Normalize()
+		Expect(err).To(Succeed())
+
+		p, err = planner.NewPlanner(c)
+		Expect(err).To(Succeed())
+
+		s, err := p.NewScanner("testdata/import")
+		Expect(err).To(Succeed())
+
+		vf, err = s.ScanFolders()
+		Expect(err).To(Succeed())
+		Expect(vf).To(HaveLen(3))
 	})
 
 	It("No Change", func() {
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v101, Revision: 2},
-				Data:  &planner.GraphState{Version: v101, Revision: 3},
-				Perf:  &planner.GraphState{Version: v101, Revision: 2},
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v101, Revision: 2},
+				"data":   &planner.GraphVersion{Version: v101, Revision: 3},
+				"perf":   &planner.GraphVersion{Version: v101, Revision: 2},
 			},
-			&planner.GraphState{Version: v101},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
+			&planner.GraphVersion{Version: v101},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
 				return true, nil
 			})
 		Ω(err).To(Succeed())
@@ -62,228 +82,238 @@ var _ = Describe("Plan", func() {
 	})
 
 	It("Up one", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v102, Revision: 2},
-				Data:  &planner.GraphState{Version: v101, Revision: 2},
-				Perf:  &planner.GraphState{Version: v101, Revision: 1},
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v102, Revision: 2},
+				"data":   &planner.GraphVersion{Version: v101, Revision: 2},
+				"perf":   &planner.GraphVersion{Version: v101, Revision: 1},
 			},
-			&planner.GraphState{Version: v102},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v102},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v102}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v102}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}))
 	})
 
 	It("Down one", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v102, Revision: 3},
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v102, Revision: 3},
 			},
-			&planner.GraphState{Version: v102, Revision: 2},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v102, Revision: 2},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v102, Revision: 2}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v102, Revision: 2}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
 		}))
 	})
 
 	It("Down one version", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v102, Revision: 3},
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v102, Revision: 3},
 			},
-			&planner.GraphState{Version: v101, Revision: 2},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v101, Revision: 2},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v101, Revision: 2}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
-			"testdata/import/schema/v1.0.2/02_down_session.cypher",
-			"testdata/import/schema/v1.0.2/01_down_plan.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v101, Revision: 2}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_down_session.cypher", "1.0.2+02", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_down_plan.cypher", "1.0.2+01", "1.0.1+02"),
 		}))
 
-		ops = ops[:0]
-		after, err = v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v102, Revision: 3},
+		ops = make([]builderOperation, 0)
+		after, err = p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v102, Revision: 3},
 			},
-			&planner.GraphState{Version: v101},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v101},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v101, Revision: 2}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.2/03_down_test.cypher",
-			"testdata/import/schema/v1.0.2/02_down_session.cypher",
-			"testdata/import/schema/v1.0.2/01_down_plan.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v101, Revision: 2}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.2/03_down_test.cypher", "1.0.2+03", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_down_session.cypher", "1.0.2+02", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_down_plan.cypher", "1.0.2+01", "1.0.1+02"),
 		}))
 	})
 
 	It("Up one from version", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v101, Revision: 2},
-				Data:  &planner.GraphState{Version: v101, Revision: 3},
-				Perf:  &planner.GraphState{Version: v101, Revision: 1},
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v101, Revision: 2},
+				"data":   &planner.GraphVersion{Version: v101, Revision: 3},
+				"perf":   &planner.GraphVersion{Version: v101, Revision: 1},
 			},
 			nil,
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v102}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v102}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}))
 	})
 
 	It("Up one to version", func() {
-		var ops []string
-		after, err := v.Plan(
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
 			nil,
-			&planner.GraphState{Version: v101, Revision: 1},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v101, Revision: 1},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v101}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.0/01_up_core.cypher",
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/data/v1.0.0/01_test.cypher",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v101}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
 		}))
 
-		ops = ops[:0]
-		after, err = v.Plan(
+		ops = make([]builderOperation, 0)
+		after, err = p.Plan(
+			vf,
 			nil,
-			&planner.GraphState{Version: v101},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v101},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v101}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.0/01_up_core.cypher",
-			"testdata/import/schema/v1.0.0/02_up_test_cmd.run",
-			"testdata/import/data/v1.0.0/01_test.cypher",
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v101}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
 		}))
 	})
 
 	It("Out of supported", func() {
-		_, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v103, Revision: 2},
-				Data:  &planner.GraphState{Version: v103, Revision: 2},
+		_, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v103, Revision: 2},
+				"data":   &planner.GraphVersion{Version: v103, Revision: 2},
 			},
-			&planner.GraphState{Version: v103},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
+			&planner.GraphVersion{Version: v103},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
 				return true, nil
 			})
 		Ω(err).To(HaveOccurred())
 	})
 
 	It("Up with Data", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v101, Revision: 2},
-				Data:  &planner.GraphState{Version: v100, Revision: 1},
-				Perf:  &planner.GraphState{Version: v101, Revision: 0},
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v101, Revision: 2},
+				"data":   &planner.GraphVersion{Version: v100, Revision: 1},
+				"perf":   &planner.GraphVersion{Version: v101, Revision: 0},
 			},
-			&planner.GraphState{Version: v102},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+			&planner.GraphVersion{Version: v102},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v102}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
-			"testdata/import/schema/v1.0.2/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.2/02_up_session.cypher",
-			"testdata/import/schema/v1.0.2/03_up_test.cypher",
-			"testdata/import/perf/v1.0.2/01_p100.cypher",
-			"testdata/import/perf/v1.0.2/02_test_cmd.run",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v102}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}))
 	})
 
 	It("Up with Unknown", func() {
-		var ops []string
-		after, err := v.Plan(
-			&planner.GraphModel{
-				Model: &planner.GraphState{Version: v101, Revision: 0},
-			}, // &planner.GraphState{Version: v100, Revision: 1},
-			&planner.GraphState{Version: v101},
-			planner.Perf,
-			func(ver *semver.Version, cf *planner.CypherFile) (bool, error) {
-				ops = append(ops, cf.FilePath())
+		var ops []builderOperation
+		after, err := p.Plan(
+			vf,
+			planner.DatabaseModel{
+				"schema": &planner.GraphVersion{Version: v101, Revision: 0},
+			}, // &planner.GraphVersion{Version: v100, Revision: 1},
+			&planner.GraphVersion{Version: v101},
+			"perf-seed",
+			func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
+				ops = append(ops, newBuilderOp(cf.FilePath(), fileVer.String(), writeVer.String()))
 				return true, nil
 			})
 		Ω(err).To(Succeed())
-		Ω(after).To(Equal(&planner.GraphState{Version: v101}))
-		Ω(ops).To(Equal([]string{
-			"testdata/import/schema/v1.0.1/01_up_plan.cypher",
-			"testdata/import/schema/v1.0.1/02_up_contract.cypher",
-			"testdata/import/data/v1.0.1/01_plans.cypher",
-			"testdata/import/data/v1.0.1/02_contracts.cypher",
-			"testdata/import/data/v1.0.1/03_test_cmd.run",
-			"testdata/import/perf/v1.0.1/01_plansx1000.cypher",
-			"testdata/import/perf/v1.0.1/02_contracts_2000.cypher",
+		Ω(after).To(Equal(&planner.GraphVersion{Version: v101}))
+		Ω(ops).To(Equal([]builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/01_plans.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+			newBuilderOp("testdata/import/perf/v1.0.1/01_plansx1000.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
 		}))
 	})
 })
