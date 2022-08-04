@@ -161,7 +161,7 @@ func (p *Planner) CreateBuilder(steps *ExecutionSteps, abs bool) Builder {
 			return false, fmt.Errorf("fail to import folder '%s', cannot determine DB labels", folderName)
 		}
 		steps.AddCypher(fmt.Sprintf(
-			"MERGE (sm:%s {version: $version})\nSET sm.file = $revision, sm.dirty = false, sm.ts = datetime();",
+			"MERGE (sm:%s {version: $version})\nSET sm.file = $revision, sm.ts = datetime();",
 			strings.Join(nodeLabels, ":"),
 		))
 
@@ -220,7 +220,7 @@ func addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
 	return nil
 }
 
-const versionCypher = `MATCH (sm:%s) RETURN sm.version AS version, sm.file AS rev, sm.dirty AS dirty
+const versionCypher = `MATCH (sm:%s) RETURN sm.version AS version, sm.file AS rev
 ORDER BY COALESCE(sm.ts, datetime({year: 0})) DESC, sm.version DESC LIMIT 1`
 
 // Version retrieves version of current state of DB
@@ -228,8 +228,8 @@ func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	var err error
 
-	gp := make(DatabaseModel)
-	gp[p.config.Planner.SchemaFolder.FolderName], err = queryVersion(session, fmt.Sprintf(
+	dbModel := make(DatabaseModel)
+	dbModel[p.config.Planner.SchemaFolder.FolderName], err = queryVersion(session, fmt.Sprintf(
 		versionCypher,
 		strings.Join(p.config.Planner.SchemaFolder.NodeLabels, ":"),
 	))
@@ -238,7 +238,7 @@ func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 	}
 
 	for folderName, folderDetail := range p.config.Planner.Folders {
-		gp[folderName], err = queryVersion(session, fmt.Sprintf(
+		dbModel[folderName], err = queryVersion(session, fmt.Sprintf(
 			versionCypher,
 			strings.Join(folderDetail.NodeLabels, ":"),
 		))
@@ -247,7 +247,7 @@ func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 		}
 	}
 
-	return gp, nil
+	return dbModel, nil
 }
 
 func queryVersion(session neo4j.Session, cypher string) (*GraphVersion, error) {

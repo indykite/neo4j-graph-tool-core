@@ -344,49 +344,49 @@ var _ = Describe("Scanner", func() {
 :param version => '1.0.0';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder schema - ver:1.0.0+02
 >>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
 :param version => '1.0.0';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder data - ver:1.0.0+01
 :source testdata/import/data/v1.0.0/01_test.cypher;
 :param version => '1.0.0';
 :param revision => 1;
 MERGE (sm:DataVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder schema - ver:1.0.1+01
 :source testdata/import/schema/v1.0.1/01_up_plan.cypher;
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder schema - ver:1.0.1+02
 :source testdata/import/schema/v1.0.1/02_up_contract.cypher;
 :param version => '1.0.1';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder data - ver:1.0.1+01
 :source testdata/import/data/v1.0.1/01_plans.cypher;
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:DataVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder data - ver:1.0.1+02
 :source testdata/import/data/v1.0.1/02_contracts.cypher;
 :param version => '1.0.1';
 :param revision => 2;
 MERGE (sm:DataVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder data - ver:1.0.1+03
 >>> graph-tool abc -n 456 --address ***** --username ***** --password *****
@@ -394,56 +394,56 @@ SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 :param version => '1.0.1';
 :param revision => 3;
 MERGE (sm:DataVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder perf - ver:1.0.1+01
 :source testdata/import/perf/v1.0.1/01_plansx1000.cypher;
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder perf - ver:1.0.1+02
 :source testdata/import/perf/v1.0.1/02_contracts_2000.cypher;
 :param version => '1.0.1';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder schema - ver:1.0.2+01
 :source testdata/import/schema/v1.0.2/01_up_plan.cypher;
 :param version => '1.0.2';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder schema - ver:1.0.2+02
 :source testdata/import/schema/v1.0.2/02_up_session.cypher;
 :param version => '1.0.2';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder schema - ver:1.0.2+03
 :source testdata/import/schema/v1.0.2/03_up_test.cypher;
 :param version => '1.0.2';
 :param revision => 3;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Importing folder perf - ver:1.0.2+01
 :source testdata/import/perf/v1.0.2/01_p100.cypher;
 :param version => '1.0.2';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder perf - ver:1.0.2+02
 // Nothing to do in this file
 :param version => '1.0.2';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 `))
 	})
@@ -464,35 +464,35 @@ SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
 :param version => '1.0.2';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running down of folder schema - ver:1.0.2+01
 :source testdata/import/schema/v1.0.2/01_down_plan.cypher;
 :param version => '1.0.1';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder schema - ver:1.0.1+02
 >>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running down of folder schema - ver:1.0.1+01
 :source testdata/import/schema/v1.0.1/01_down_plan.cypher;
 :param version => '1.0.0';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 // Running down of folder schema - ver:1.0.0+02
 :source testdata/import/schema/v1.0.0/02_down_test_cmd.cypher;
 :param version => '1.0.0';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
-SET sm.file = $revision, sm.dirty = false, sm.ts = datetime();
+SET sm.file = $revision, sm.ts = datetime();
 
 `))
 	})
