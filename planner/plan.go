@@ -17,8 +17,8 @@ package planner
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -179,7 +179,7 @@ func parseArgs(line string) []string {
 }
 
 func addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
-	content, err := ioutil.ReadFile(cf.path)
+	content, err := os.ReadFile(cf.path)
 	if err != nil {
 		return err
 	}
@@ -317,8 +317,8 @@ func (p *Planner) Upgrade(
 	}
 
 	type orderedVersion struct {
-		folderName string
 		version    *GraphVersion
+		folderName string
 	}
 
 	versions := []orderedVersion{}

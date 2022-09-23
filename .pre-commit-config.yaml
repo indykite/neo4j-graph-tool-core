@@ -30,6 +30,9 @@ repos:
           - id: check-added-large-files
           - id: detect-private-key
           - id: pretty-format-json
+            args: [--no-sort-keys, --autofix]
+          - id: no-commit-to-branch
+            args: [--branch, master]
 
     - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt.git
       rev: 0.2.1
@@ -43,15 +46,27 @@ repos:
 
     - repo: local
       hooks:
-          - id: golangci-lint
-            name: Run golangci-lint
-            entry: golangci-lint run --timeout 2m0s ./...
+          - id: go_tools
+            name: Install go tools
+            entry: make install-tools
+            language: system
+            pass_filenames: false
+
+          - id: gci
+            name: Fix imports and Format go code
+            entry: make fmt gci
+            language: system
+            pass_filenames: false
+
+          - id: go_lint
+            name: Run lint
+            entry: make lint
             language: system
             pass_filenames: false
 
           - id: go_test
             name: Run tests
-            entry: go test -v ./...
+            entry: make test
             language: system
             pass_filenames: false
 

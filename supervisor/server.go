@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -65,8 +66,9 @@ func runHTTPServer(
 	g.NoRoute(s.error404)
 
 	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: g,
+		Addr:              ":8080",
+		Handler:           g,
+		ReadHeaderTimeout: time.Second * 2,
 	}
 
 	go func() {

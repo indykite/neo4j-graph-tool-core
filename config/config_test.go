@@ -97,7 +97,6 @@ var _ = Describe("LoadFile", func() {
 				})),
 			})),
 		})))
-
 	})
 
 	It("Set deprecated environment variables", func() {
@@ -117,7 +116,6 @@ var _ = Describe("LoadFile", func() {
 				"Neo4jAuth":    Equal("identification"),
 			})),
 		})))
-
 	})
 
 	It("Default data", func() {
@@ -166,7 +164,6 @@ var _ = Describe("LoadFile", func() {
 		_, err := config.LoadFile("testdata/invalid.toml.file")
 		Expect(err).To(MatchError(ContainSubstring("Unsupported Config Type")))
 	})
-
 })
 
 var _ = Describe("Validation & Normalize", func() {

@@ -45,19 +45,20 @@ type (
 	}
 
 	Supervisor struct {
-		Port         int    `mapstructure:"port"`
 		LogLevel     string `mapstructure:"log_level"`
 		GraphVersion string `mapstructure:"graph_version"`
 		InitialBatch string `mapstructure:"initial_batch"`
 		Neo4jAuth    string `mapstructure:"neo4j_auth"`
+		Port         int    `mapstructure:"port"`
 	}
 
 	Planner struct {
-		BaseFolder     string                   `mapstructure:"base_folder"`
-		DropCypherFile string                   `mapstructure:"drop_cypher_file"`
-		Batches        map[string]*BatchDetail  `mapstructure:"batches"`
-		SchemaFolder   *SchemaFolder            `mapstructure:"schema_folder"`
-		Folders        map[string]*FolderDetail `mapstructure:"folders"`
+		Batches      map[string]*BatchDetail  `mapstructure:"batches"`
+		SchemaFolder *SchemaFolder            `mapstructure:"schema_folder"`
+		Folders      map[string]*FolderDetail `mapstructure:"folders"`
+
+		BaseFolder     string `mapstructure:"base_folder"`
+		DropCypherFile string `mapstructure:"drop_cypher_file"`
 	}
 
 	SchemaFolder struct {
