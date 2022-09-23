@@ -1,18 +1,18 @@
 [supervisor]
-port = 8080
+port = 5566
 log_level = 'warn'
 graph_version = 'v1.0.0'
 initial_batch = "schema"
 neo4j_auth = "username/password"
 
 [planner]
-base_folder = 'import'
-drop_cypher_file = 'drop.cypher'
+base_folder = 'all-data'
+drop_cypher_file = 'drop-file.cypher'
 
 [planner.schema_folder]
-folder_name = 'schema'
+folder_name = 'base-schema'
 migration_type = 'up_down'
-node_labels = ['GraphToolMigration', "SchemaVersion"]
+node_labels = ["SchemaVersion"]
 
 [planner.folders]
 data = {migration_type = 'change', node_labels = ['DataVersion']}

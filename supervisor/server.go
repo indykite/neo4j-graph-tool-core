@@ -65,7 +65,7 @@ func runHTTPServer(
 	g.GET("/restart", s.restartServiceHandler)
 	g.NoRoute(s.error404)
 
-	srv := &http.Server{
+	s.srv = &http.Server{
 		Addr:              ":8080",
 		Handler:           g,
 		ReadHeaderTimeout: time.Second * 2,
@@ -73,7 +73,7 @@ func runHTTPServer(
 
 	go func() {
 		// ListenAndServe always returns error. ErrServerClosed on graceful close.
-		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		if err := s.srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			s.httpLog.Fatalf("Serve failed: %v", err)
 		}
 	}()

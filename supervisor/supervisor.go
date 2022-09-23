@@ -70,6 +70,7 @@ func Start(cfg *config.Config) error {
 		cancelCtx: cancelCtx,
 		log:       log,
 		neo4j:     neo4j,
+		cfg:       cfg,
 	}
 
 	if err = s.loadBatchTarget(); err != nil {
@@ -78,6 +79,12 @@ func Start(cfg *config.Config) error {
 
 	// Start HTTP server in background thread
 	s.httpServer = runHTTPServer(ctx, neo4j, log, s.schemaVersion, s.initialBatch)
+
+	// Always start Neo4j when supervisor is started
+	err = neo4j.Start()
+	if err != nil {
+		log.Error(err.Error())
+	}
 
 	// Will wait for DB and then insert data into DB
 	go s.bootstrapDB()
@@ -152,5 +159,5 @@ func (s *supervisor) stop() {
 
 	// Give time for goroutines to finnish properly
 	time.Sleep(1 * time.Millisecond)
-	s.log.Info("All quited, good bye")
+	s.log.Info("All quit, good bye")
 }

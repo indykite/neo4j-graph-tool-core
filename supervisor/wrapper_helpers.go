@@ -44,16 +44,6 @@ func (w *Neo4jWrapper) getImportDir() string {
 	return path
 }
 
-func (w *Neo4jWrapper) getNeo4jAuthForCLI() (username string, password string) {
-	auth := strings.SplitN(w.cfg.Supervisor.Neo4jAuth, "/", 2)
-	if len(auth) == 2 {
-		return "\"" + auth[0] + "\"", "\"" + auth[1] + "\""
-	}
-
-	// Pass really empty string to avoid asking
-	return "\"\"", "\"\""
-}
-
 func (w *Neo4jWrapper) getNeo4jBasicAuth() (username string, password string, realm string) {
 	auth := strings.SplitN(w.cfg.Supervisor.Neo4jAuth, "/", 2)
 	if len(auth) == 2 {
