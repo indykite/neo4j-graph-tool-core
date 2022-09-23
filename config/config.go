@@ -27,7 +27,7 @@ import (
 
 const (
 	DefaultPort                = 8080
-	DefaultLogLevel            = "warn"
+	DefaultLogLevel            = "info"
 	DefaultBaseFolder          = "import"
 	DefaultDropCypherFile      = "drop.cypher"
 	DefaultSchemaFolderName    = "schema"

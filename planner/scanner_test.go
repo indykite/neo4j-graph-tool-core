@@ -121,6 +121,9 @@ var _ = Describe("Scanner", func() {
 		_, err = p.Upgrade(vf, dbModel, nil, "not-checked", nil)
 		Expect(err).To(MatchError("out of range min:&1.0.0 low:0.1.0"))
 
+		_, err = p.Upgrade(vf, nil, dbSchemaVersion, "non-existing", nil)
+		Expect(err).To(MatchError("unknown batch name 'non-existing'"))
+
 		nv, err := p.Upgrade(vf, nil, dbSchemaVersion, "perf-seed", nil)
 		Expect(nv).To(BeNil())
 		Expect(err).To(Succeed())
@@ -142,7 +145,7 @@ var _ = Describe("Scanner", func() {
 	})
 
 	DescribeTable("Upgrade",
-		func(model, data, perf, target string, expected []builderOperation) {
+		func(model, data, perf, target, batchName string, expected []builderOperation) {
 			var err error
 			dbModel := planner.DatabaseModel{}
 
@@ -167,7 +170,7 @@ var _ = Describe("Scanner", func() {
 
 			var ops []builderOperation
 
-			changed, err := p.Upgrade(vf, dbModel, to, "perf-seed",
+			changed, err := p.Upgrade(vf, dbModel, to, planner.Batch(batchName),
 				func(folder string, cf *planner.MigrationFile, fileVer, writeVer *planner.GraphVersion) (bool, error) {
 					_, _ = fmt.Fprintf(GinkgoWriter,
 						"'%s' (%s) -> folder '%s' file: '%s'\n", fileVer, writeVer, folder, cf.FilePath())
@@ -178,7 +181,7 @@ var _ = Describe("Scanner", func() {
 			Expect(changed).To(Not(BeNil()))
 			Expect(ops).To(Equal(expected))
 		},
-		Entry("Full", "", "", "", "", []builderOperation{
+		Entry("Full", "", "", "", "", "perf-seed", []builderOperation{
 			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
 			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
 			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
@@ -195,7 +198,16 @@ var _ = Describe("Scanner", func() {
 			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
 			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
-		Entry("From v1.0.0-1", "1.0.0+01", "1.0.0+01", "", "", []builderOperation{
+		Entry("Full - schema only", "", "", "", "", "schema", []builderOperation{
+			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
+			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+			newBuilderOp("testdata/import/schema/v1.0.2/03_up_test.cypher", "1.0.2+03", "1.0.2+03"),
+		}),
+		Entry("From v1.0.0-1", "1.0.0+01", "1.0.0+01", "", "", "perf-seed", []builderOperation{
 			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
 			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
 			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
@@ -210,20 +222,21 @@ var _ = Describe("Scanner", func() {
 			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
 			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
-		Entry("From v1.0.0-1 Data v1.0.1-1", "1.0.0+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []builderOperation{
-			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
-			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
-			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
-			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
-			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
-			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
-			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
-			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
-			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
-			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
-		}),
+		Entry("From v1.0.0-1 Data v1.0.1-1", "1.0.0+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", "perf-seed",
+			[]builderOperation{
+				newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
+				newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
+				newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+				newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+				newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+				newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+				newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
+			}),
 
-		Entry("From Data v1.0.0-1", "", "1.0.0+01", "", "", []builderOperation{
+		Entry("From Data v1.0.0-1", "", "1.0.0+01", "", "", "perf-seed", []builderOperation{
 			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
 			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
 			newBuilderOp("testdata/import/schema/v1.0.1/01_up_plan.cypher", "1.0.1+01", "1.0.1+01"),
@@ -240,7 +253,7 @@ var _ = Describe("Scanner", func() {
 			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
 
-		Entry("To v1.0.1", "", "", "", "1.0.1", []builderOperation{
+		Entry("To v1.0.1", "", "", "", "1.0.1", "perf-seed", []builderOperation{
 			newBuilderOp("testdata/import/schema/v1.0.0/01_up_core.cypher", "1.0.0+01", "1.0.0+01"),
 			newBuilderOp("testdata/import/schema/v1.0.0/02_up_test_cmd.run", "1.0.0+02", "1.0.0+02"),
 			newBuilderOp("testdata/import/data/v1.0.0/01_test.cypher", "1.0.0+01", "1.0.0+01"),
@@ -253,15 +266,24 @@ var _ = Describe("Scanner", func() {
 			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
 		}),
 
-		Entry("From v1.0.1-1 to v1.0.2-2", "1.0.1+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", []builderOperation{
+		Entry("From v1.0.1-1 to v1.0.2-2", "1.0.1+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", "perf-seed",
+			[]builderOperation{
+				newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
+				newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
+				newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
+				newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
+				newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
+				newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
+			}),
+
+		Entry("From v1.0.1-1 to v1.0.2-2", "1.0.1+01", "1.0.1+01", "1.0.1+01", "1.0.2+02", "seed", []builderOperation{
 			newBuilderOp("testdata/import/schema/v1.0.1/02_up_contract.cypher", "1.0.1+02", "1.0.1+02"),
 			newBuilderOp("testdata/import/data/v1.0.1/02_contracts.cypher", "1.0.1+02", "1.0.1+02"),
 			newBuilderOp("testdata/import/data/v1.0.1/03_test_cmd.run", "1.0.1+03", "1.0.1+03"),
-			newBuilderOp("testdata/import/perf/v1.0.1/02_contracts_2000.cypher", "1.0.1+02", "1.0.1+02"),
 			newBuilderOp("testdata/import/schema/v1.0.2/01_up_plan.cypher", "1.0.2+01", "1.0.2+01"),
 			newBuilderOp("testdata/import/schema/v1.0.2/02_up_session.cypher", "1.0.2+02", "1.0.2+02"),
-			newBuilderOp("testdata/import/perf/v1.0.2/01_p100.cypher", "1.0.2+01", "1.0.2+01"),
-			newBuilderOp("testdata/import/perf/v1.0.2/02_test_cmd.run", "1.0.2+02", "1.0.2+02"),
 		}),
 	)
 

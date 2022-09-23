@@ -399,18 +399,23 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		return nil
 	}
 
-	user, pass := w.getNeo4jAuthForCLI()
-
 	if err = w.setState(Starting); err != nil {
 		return err
+	}
+
+	user, pass, _ := w.getNeo4jBasicAuth()
+	if os.Getenv("NEO4J_USERNAME") == "" {
+		_ = os.Setenv("NEO4J_USERNAME", user)
+	}
+	if os.Getenv("NEO4J_PASSWORD") == "" {
+		_ = os.Setenv("NEO4J_PASSWORD", pass)
 	}
 
 	for _, step := range *execSteps {
 		if step.IsCypher() {
 			_, err = w.startUtility(true, step.Cypher(),
 				"cypher-shell", /*"--non-interactive",*/
-				"--fail-fast", "--format", "verbose",
-				"-u", user, "-p", pass, "-d", "neo4j")
+				"--fail-fast", "--format", "verbose", "-d", "neo4j")
 		} else {
 			toExec := step.Command()
 			switch toExec[0] {
@@ -419,7 +424,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 			case "graph-tool":
 				toExec[0] = graphToolPath
 			}
-			_, err = w.startUtility(true, nil, append(toExec, "-u", user, "-p", pass)...)
+			_, err = w.startUtility(true, nil, toExec...)
 		}
 		if err != nil {
 			w.log.Warnf("Failed to import file: %v", err)

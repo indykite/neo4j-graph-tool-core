@@ -28,15 +28,15 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":         Equal(config.DefaultPort),
-				"LogLevel":     Equal(config.DefaultLogLevel),
+				"Port":         Equal(5566),
+				"LogLevel":     Equal("warn"),
 				"GraphVersion": Equal("v1.0.0"),
 				"InitialBatch": Equal("schema"),
 				"Neo4jAuth":    Equal("username/password"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
-				"BaseFolder":     Equal(config.DefaultBaseFolder),
-				"DropCypherFile": Equal(config.DefaultDropCypherFile),
+				"BaseFolder":     Equal("all-data"),
+				"DropCypherFile": Equal("drop-file.cypher"),
 				"Batches": MatchAllKeys(Keys{
 					"data": PointTo(MatchAllFields(Fields{
 						"Folders": ConsistOf("data"),
@@ -47,18 +47,18 @@ var _ = Describe("LoadFile", func() {
 				}),
 				"Folders": MatchAllKeys(Keys{
 					"data": PointTo(MatchAllFields(Fields{
-						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"MigrationType": Equal("change"),
 						"NodeLabels":    ConsistOf("DataVersion"),
 					})),
 					"perf": PointTo(MatchAllFields(Fields{
-						"MigrationType": Equal(config.DefaultFolderMigrationType),
+						"MigrationType": Equal("change"),
 						"NodeLabels":    ConsistOf("PerfVersion"),
 					})),
 				}),
 				"SchemaFolder": PointTo(MatchAllFields(Fields{
-					"FolderName":    Equal(config.DefaultSchemaFolderName),
-					"MigrationType": Equal(config.DefaultSchemaMigrationType),
-					"NodeLabels":    ConsistOf(config.DefaultNodeLabel, "SchemaVersion"),
+					"FolderName":    Equal("base-schema"),
+					"MigrationType": Equal("up_down"),
+					"NodeLabels":    ConsistOf("SchemaVersion"),
 				})),
 			})),
 		})))
@@ -71,7 +71,7 @@ var _ = Describe("LoadFile", func() {
 			"GT_SUPERVISOR_GRAPH_VERSION":          "v1.0.0",
 			"GT_SUPERVISOR_INITIAL_BATCH":          "data",
 			"GT_SUPERVISOR_NEO4J_AUTH":             "identification",
-			"GT_PLANNER_BASE_FOLDER":               "base_folder",
+			"GT_PLANNER_BASE_FOLDER":               "base-schema",
 			"GT_PLANNER_DROP_CYPHER_FILE":          "cypher.file",
 			"GT_PLANNER_SCHEMA_FOLDER_NODE_LABELS": "abc,def", // array of two elements
 		})
@@ -88,10 +88,10 @@ var _ = Describe("LoadFile", func() {
 				"Neo4jAuth":    Equal("identification"),
 			})),
 			"Planner": PointTo(MatchFields(IgnoreExtras, Fields{
-				"BaseFolder":     Equal("base_folder"),
+				"BaseFolder":     Equal("base-schema"),
 				"DropCypherFile": Equal("cypher.file"),
 				"SchemaFolder": PointTo(MatchAllFields(Fields{
-					"FolderName":    Equal(config.DefaultSchemaFolderName),
+					"FolderName":    Equal("base-schema"),
 					"MigrationType": Equal(config.DefaultSchemaMigrationType),
 					"NodeLabels":    ConsistOf("abc", "def"),
 				})),

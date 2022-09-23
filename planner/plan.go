@@ -334,25 +334,28 @@ func (p *Planner) Upgrade(
 		return nil, err
 	}
 
-	batchFolders, hasBatch := p.config.Planner.Batches[string(batch)]
-	if !hasBatch {
-		return nil, errors.New("unknown batch name '" + string(batch) + "'")
-	}
-
-	for _, folderName := range batchFolders.Folders {
-		gv := &GraphVersion{}
-		versions = append(versions, orderedVersion{
-			folderName: folderName,
-			version:    gv,
-		})
-		if lgv := dbModel[folderName]; lgv != nil {
-			gv.Version = lgv.Version
-			gv.Revision = lgv.Revision
+	if batch != "schema" {
+		batchFolders, hasBatch := p.config.Planner.Batches[string(batch)]
+		// schema is implicit batch
+		if !hasBatch {
+			return nil, errors.New("unknown batch name '" + string(batch) + "'")
 		}
 
-		gv.Version, highVer, err = versionFolders.verifyRange(gv.Version, highVer)
-		if err != nil {
-			return nil, err
+		for _, folderName := range batchFolders.Folders {
+			gv := &GraphVersion{}
+			versions = append(versions, orderedVersion{
+				folderName: folderName,
+				version:    gv,
+			})
+			if lgv := dbModel[folderName]; lgv != nil {
+				gv.Version = lgv.Version
+				gv.Revision = lgv.Revision
+			}
+
+			gv.Version, highVer, err = versionFolders.verifyRange(gv.Version, highVer)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
