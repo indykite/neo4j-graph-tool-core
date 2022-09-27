@@ -36,6 +36,7 @@ const (
 	DefaultNodeSubString       = "Version"
 	DefaultFolderMigrationType = "change"
 	DefaultInitialBatch        = "schema"
+	DefaultCypherShellFormat   = "auto"
 )
 
 type (
@@ -45,11 +46,12 @@ type (
 	}
 
 	Supervisor struct {
-		LogLevel     string `mapstructure:"log_level"`
-		GraphVersion string `mapstructure:"graph_version"`
-		InitialBatch string `mapstructure:"initial_batch"`
-		Neo4jAuth    string `mapstructure:"neo4j_auth"`
-		Port         int    `mapstructure:"port"`
+		LogLevel          string `mapstructure:"log_level"`
+		GraphVersion      string `mapstructure:"graph_version"`
+		InitialBatch      string `mapstructure:"initial_batch"`
+		Neo4jAuth         string `mapstructure:"neo4j_auth"`
+		CypherShellFormat string `mapstructure:"cypher_shell_format"`
+		Port              int    `mapstructure:"port"`
 	}
 
 	Planner struct {
@@ -78,9 +80,11 @@ type (
 )
 
 var (
-	logLevelValues = []string{"fatal", "error", "warn", "warning", "info", "debug", "trace"}
-	migrationTypes = []string{"change", "up_down"}
-	labelCaser     = cases.Title(language.English)
+	labelCaser = cases.Title(language.English)
+
+	logLevelValues          = []string{"fatal", "error", "warn", "warning", "info", "debug", "trace"}
+	migrationTypes          = []string{"change", "up_down"}
+	cypherShellFormatValues = []string{"auto", "verbose", "plain"}
 )
 
 // New creates a new config containing values from environment variables and default values
@@ -104,6 +108,7 @@ func LoadFile(fileName string) (*Config, error) {
 	v.SetDefault("supervisor.port", DefaultPort)
 	v.SetDefault("supervisor.log_level", DefaultLogLevel)
 	v.SetDefault("supervisor.initial_batch", DefaultInitialBatch)
+	v.SetDefault("supervisor.cypher_shell_format", DefaultCypherShellFormat)
 	v.SetDefault("planner.drop_cypher_file", DefaultDropCypherFile)
 	v.SetDefault("planner.base_folder", DefaultBaseFolder)
 	v.SetDefault("planner.schema_folder.folder_name", DefaultSchemaFolderName)
@@ -201,8 +206,13 @@ func (c *Config) validateSupervisor() error {
 	}
 
 	if !stringInArray(logLevelValues, c.Supervisor.LogLevel) {
-		return fmt.Errorf("logLevel value '%s' is invalid, must be one of '%s'",
+		return fmt.Errorf("log_level value '%s' is invalid, must be one of '%s'",
 			c.Supervisor.LogLevel, strings.Join(logLevelValues, ","))
+	}
+
+	if !stringInArray(cypherShellFormatValues, c.Supervisor.CypherShellFormat) {
+		return fmt.Errorf("cypher_shell_format value '%s' is invalid, must be one of '%s'",
+			c.Supervisor.CypherShellFormat, strings.Join(cypherShellFormatValues, ","))
 	}
 
 	return nil

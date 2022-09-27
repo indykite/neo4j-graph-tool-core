@@ -28,11 +28,12 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":         Equal(5566),
-				"LogLevel":     Equal("warn"),
-				"GraphVersion": Equal("v1.0.0"),
-				"InitialBatch": Equal("schema"),
-				"Neo4jAuth":    Equal("username/password"),
+				"Port":              Equal(5566),
+				"LogLevel":          Equal("warn"),
+				"GraphVersion":      Equal("v1.0.0"),
+				"InitialBatch":      Equal("schema"),
+				"Neo4jAuth":         Equal("username/password"),
+				"CypherShellFormat": Equal("verbose"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
 				"BaseFolder":     Equal("all-data"),
@@ -71,6 +72,7 @@ var _ = Describe("LoadFile", func() {
 			"GT_SUPERVISOR_GRAPH_VERSION":          "v1.0.0",
 			"GT_SUPERVISOR_INITIAL_BATCH":          "data",
 			"GT_SUPERVISOR_NEO4J_AUTH":             "identification",
+			"GT_SUPERVISOR_CYPHER_SHELL_FORMAT":    "plain",
 			"GT_PLANNER_BASE_FOLDER":               "base-schema",
 			"GT_PLANNER_DROP_CYPHER_FILE":          "cypher.file",
 			"GT_PLANNER_SCHEMA_FOLDER_NODE_LABELS": "abc,def", // array of two elements
@@ -81,11 +83,12 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":         Equal(1500),
-				"LogLevel":     Equal("error"),
-				"GraphVersion": Equal("v1.0.0"),
-				"InitialBatch": Equal("data"),
-				"Neo4jAuth":    Equal("identification"),
+				"Port":              Equal(1500),
+				"LogLevel":          Equal("error"),
+				"GraphVersion":      Equal("v1.0.0"),
+				"InitialBatch":      Equal("data"),
+				"Neo4jAuth":         Equal("identification"),
+				"CypherShellFormat": Equal("plain"),
 			})),
 			"Planner": PointTo(MatchFields(IgnoreExtras, Fields{
 				"BaseFolder":     Equal("base-schema"),
@@ -123,11 +126,12 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":         Equal(config.DefaultPort),
-				"LogLevel":     Equal(config.DefaultLogLevel),
-				"GraphVersion": HaveLen(0),
-				"InitialBatch": Equal("schema"),
-				"Neo4jAuth":    HaveLen(0),
+				"Port":              Equal(config.DefaultPort),
+				"LogLevel":          Equal(config.DefaultLogLevel),
+				"GraphVersion":      HaveLen(0),
+				"InitialBatch":      Equal("schema"),
+				"Neo4jAuth":         HaveLen(0),
+				"CypherShellFormat": Equal("auto"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
 				"BaseFolder":     Equal(config.DefaultBaseFolder),
@@ -172,10 +176,11 @@ var _ = Describe("Validation & Normalize", func() {
 	BeforeEach(func() {
 		configStruct = &config.Config{
 			Supervisor: &config.Supervisor{
-				Port:         config.DefaultPort,
-				LogLevel:     config.DefaultLogLevel,
-				InitialBatch: "schema",
-				Neo4jAuth:    "auth",
+				Port:              config.DefaultPort,
+				LogLevel:          config.DefaultLogLevel,
+				InitialBatch:      "schema",
+				Neo4jAuth:         "auth",
+				CypherShellFormat: "plain",
 			},
 			Planner: &config.Planner{
 				BaseFolder:     config.DefaultBaseFolder,
@@ -217,7 +222,12 @@ var _ = Describe("Validation & Normalize", func() {
 
 	It("Successfully validate manual config", func() {
 		cfg := &config.Config{
-			Supervisor: &config.Supervisor{Port: 2555, LogLevel: "debug", InitialBatch: "schema"},
+			Supervisor: &config.Supervisor{
+				Port:              2555,
+				LogLevel:          "debug",
+				InitialBatch:      "schema",
+				CypherShellFormat: "auto",
+			},
 			Planner: &config.Planner{
 				BaseFolder: "abc",
 				SchemaFolder: &config.SchemaFolder{
@@ -319,7 +329,11 @@ var _ = Describe("Validation & Normalize", func() {
 
 		Entry("Log Level", func(cfg *config.Config) {
 			cfg.Supervisor.LogLevel = "xxx"
-		}, MatchError("logLevel value 'xxx' is invalid, must be one of 'fatal,error,warn,warning,info,debug,trace'")),
+		}, MatchError("log_level value 'xxx' is invalid, must be one of 'fatal,error,warn,warning,info,debug,trace'")),
+
+		Entry("CypherShellFormat", func(cfg *config.Config) {
+			cfg.Supervisor.CypherShellFormat = "xxx"
+		}, MatchError("cypher_shell_format value 'xxx' is invalid, must be one of 'auto,verbose,plain'")),
 
 		Entry("Graph Version", func(cfg *config.Config) {
 			cfg.Supervisor.GraphVersion = "www"

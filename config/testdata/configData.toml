@@ -4,6 +4,7 @@ log_level = 'warn'
 graph_version = 'v1.0.0'
 initial_batch = "schema"
 neo4j_auth = "username/password"
+cypher_shell_format = "verbose"
 
 [planner]
 base_folder = 'all-data'

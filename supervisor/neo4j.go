@@ -124,7 +124,7 @@ func (w *Neo4jWrapper) Start() error {
 	if w.serviceCmd != nil {
 		return fmt.Errorf("service is in '%s' state already, cannot be started again", w.serviceState)
 	}
-	w.log.Trace("Starting neo4j process")
+	w.log.Debug("Starting neo4j process")
 	w.serviceState = Starting
 	var err error
 	w.serviceCmd, err = StartCmd(w.log.WithField(ComponentLogKey, "neo4j"), nil, processArgs...)
@@ -355,11 +355,19 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		return fmt.Errorf("cannot run import when service is '%s', must be running", w.serviceState)
 	}
 
+	w.log.WithFields(logrus.Fields{
+		"clean":  clean,
+		"batch":  batchName,
+		"dryRun": dryRun,
+		"target": target,
+	}).Debug("Refreshing data")
+
 	// We already validated config before
 	p, _ := planner.NewPlanner(w.cfg)
 
 	var dbModel planner.DatabaseModel
 	if !clean {
+		w.log.Trace("Connecting to DB to fetch current version")
 		var d neo4j.Driver
 		d, err = w.Driver()
 		if err != nil {
@@ -370,12 +378,14 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		if err != nil {
 			return err
 		}
+		w.log.WithField("db_model", dbModel).Trace("DB version fetched")
 	}
 
 	scanner, err := p.NewScanner(w.getImportDir())
 	if err != nil {
 		return err
 	}
+	w.log.WithField("folder", w.getImportDir()).Trace("Scanning folders")
 	vf, err := scanner.ScanFolders()
 	if err != nil {
 		return err
@@ -396,6 +406,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		fmt.Print(execSteps.String())
 		return nil
 	} else if changed == nil {
+		w.log.Debug("Nothing to change")
 		return nil
 	}
 
@@ -414,8 +425,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 	for _, step := range *execSteps {
 		if step.IsCypher() {
 			_, err = w.startUtility(true, step.Cypher(),
-				"cypher-shell", /*"--non-interactive",*/
-				"--fail-fast", "--format", "verbose", "-d", "neo4j")
+				"cypher-shell", "--fail-fast", "--format", w.cfg.Supervisor.CypherShellFormat, "-d", "neo4j")
 		} else {
 			toExec := step.Command()
 			switch toExec[0] {
@@ -431,7 +441,7 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 			break
 		}
 	}
-	w.log.Debug("Import finished file")
+	w.log.Info("Import finished")
 
 	if stateErr := w.setState(Running); stateErr != nil {
 		return stateErr
@@ -457,6 +467,7 @@ func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) 
 	ul.Trace("Utility started")
 
 	waitAndClean := func() error {
+		ul.Trace("Starting to clean up")
 		err = cmd.WaitTS()
 		utilsMux.Lock()
 		defer utilsMux.Unlock()
