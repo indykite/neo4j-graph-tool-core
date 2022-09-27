@@ -104,13 +104,13 @@ func (s *supervisor) loadBatchTarget() error {
 		if err != nil {
 			return fmt.Errorf("invalid graph version '%s': %w", v, err)
 		}
-		s.log.WithField("version", s.schemaVersion).Info("Target Graph Version is set")
+		s.log.WithField("version", s.schemaVersion).Debug("Target Graph Version is set")
 	} else {
 		s.log.Warn("Target GraphModel is not set")
 	}
 
 	s.initialBatch = planner.Batch(s.cfg.Supervisor.InitialBatch)
-	s.log.WithField("batch", s.cfg.Supervisor.InitialBatch).Info("Initial batch is set")
+	s.log.WithField("batch", s.cfg.Supervisor.InitialBatch).Debug("Initial batch is set")
 
 	return nil
 }

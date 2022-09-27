@@ -76,6 +76,8 @@ var (
 	coreCypher = regexp.MustCompile(`(?i)^(?P<commit>\d{1,3})_(?P<direction>up|down)_(?P<name>\w+)\.(?P<type>cypher|run)$`) // nolint:lll
 	dataCypher = regexp.MustCompile(`(?i)^(?P<commit>\d{1,3})_(?P<name>\w+)\.(?P<type>cypher|run)$`)
 	zero, _    = semver.NewVersion("0.0.0")
+
+	_ fmt.Stringer = DatabaseModel{} // Be sure DatabaseModel implements String method
 )
 
 // Compare compares this version to another one. It returns -1, 0, or 1 if
@@ -101,6 +103,14 @@ func (a *GraphVersion) Compare(b *GraphVersion) int {
 	default:
 		return 0
 	}
+}
+
+func (dbm DatabaseModel) String() string {
+	versions := make([]string, 0, len(dbm))
+	for m, v := range dbm {
+		versions = append(versions, fmt.Sprintf(`"%s": %s`, m, v))
+	}
+	return "{" + strings.Join(versions, ", ") + "}"
 }
 
 func (a *GraphVersion) String() string {

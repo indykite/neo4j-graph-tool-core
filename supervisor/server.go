@@ -71,6 +71,7 @@ func runHTTPServer(
 		ReadHeaderTimeout: time.Second * 2,
 	}
 
+	logger.Debug("Starting HTTP server")
 	go func() {
 		// ListenAndServe always returns error. ErrServerClosed on graceful close.
 		if err := s.srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {

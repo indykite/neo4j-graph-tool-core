@@ -61,6 +61,7 @@ func (w *Neo4jWrapper) drop(steps *planner.ExecutionSteps) error {
 	if err != nil {
 		return err
 	}
+	w.log.WithField("file", fp).Trace("Adding drop file to execution steps")
 	steps.AddCypher(
 		"// wipe out the entire database\n",
 		":source ", fp, "\n",
