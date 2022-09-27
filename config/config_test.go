@@ -38,6 +38,10 @@ var _ = Describe("LoadFile", func() {
 			"Planner": PointTo(MatchAllFields(Fields{
 				"BaseFolder":     Equal("all-data"),
 				"DropCypherFile": Equal("drop-file.cypher"),
+				"AllowedCommands": MatchAllKeys(Keys{
+					"another-tool": Equal("/var/path/to/another-tool"),
+					"graph-tool":   Equal("/app/graph-tool"),
+				}),
 				"Batches": MatchAllKeys(Keys{
 					"data": PointTo(MatchAllFields(Fields{
 						"Folders": ConsistOf("data"),
@@ -134,9 +138,10 @@ var _ = Describe("LoadFile", func() {
 				"CypherShellFormat": Equal("auto"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
-				"BaseFolder":     Equal(config.DefaultBaseFolder),
-				"DropCypherFile": Equal(config.DefaultDropCypherFile),
-				"Batches":        HaveLen(0),
+				"BaseFolder":      Equal(config.DefaultBaseFolder),
+				"DropCypherFile":  Equal(config.DefaultDropCypherFile),
+				"AllowedCommands": HaveLen(0),
+				"Batches":         HaveLen(0),
 				"SchemaFolder": PointTo(MatchAllFields(Fields{
 					"FolderName":    Equal(config.DefaultSchemaFolderName),
 					"MigrationType": Equal(config.DefaultSchemaMigrationType),
@@ -183,8 +188,9 @@ var _ = Describe("Validation & Normalize", func() {
 				CypherShellFormat: "plain",
 			},
 			Planner: &config.Planner{
-				BaseFolder:     config.DefaultBaseFolder,
-				DropCypherFile: config.DefaultDropCypherFile,
+				BaseFolder:      config.DefaultBaseFolder,
+				DropCypherFile:  config.DefaultDropCypherFile,
+				AllowedCommands: map[string]string{"graph-tool": "/app/graph-tool"},
 				SchemaFolder: &config.SchemaFolder{
 					FolderName:    config.DefaultSchemaFolderName,
 					MigrationType: config.DefaultFolderMigrationType,
@@ -290,6 +296,14 @@ var _ = Describe("Validation & Normalize", func() {
 				cfg.Planner.SchemaFolder.FolderName: {},
 			}
 		}, MatchError("folder 'schema' is used as schema folder and cannot be used again in planner.folders")),
+
+		Entry("Empty command name", func(cfg *config.Config) {
+			cfg.Planner.AllowedCommands = map[string]string{"": ""}
+		}, MatchError("command name cannot be empty")),
+
+		Entry("Empty command path", func(cfg *config.Config) {
+			cfg.Planner.AllowedCommands = map[string]string{"tool": ""}
+		}, MatchError("path to command 'tool' cannot be empty")),
 
 		Entry("Empty batch config", func(cfg *config.Config) {
 			cfg.Planner.Batches = map[string]*config.BatchDetail{

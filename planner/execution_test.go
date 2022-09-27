@@ -77,7 +77,7 @@ var _ = Describe("ExecutionSteps", func() {
 		Expect(ess).To(HaveLen(3))
 		Expect(ess.String()).To(Equal(
 			"first cypher;second cypher;" +
-				">>> my-super-command --address ***** --username ***** --password *****\n" +
+				">>> my-super-command\n" +
 				"third cypher;last cypher;"))
 	})
 
@@ -94,9 +94,6 @@ var _ = Describe("ExecutionSteps", func() {
 		ess.AddCommand([]string{"my-cmd", "with spaces", "another text with spaces"})
 
 		Expect(ess).To(HaveLen(1))
-		Expect(ess.String()).To(Equal(
-			`>>> my-cmd "with spaces" "another text with spaces" ` +
-				"--address ***** --username ***** --password *****\n",
-		))
+		Expect(ess.String()).To(Equal(`>>> my-cmd "with spaces" "another text with spaces"` + "\n"))
 	})
 })

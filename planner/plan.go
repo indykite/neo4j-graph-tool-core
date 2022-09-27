@@ -125,7 +125,7 @@ func (p *Planner) CreateBuilder(steps *ExecutionSteps, abs bool) Builder {
 		steps.AddCypher(fmt.Sprintf("// %s folder %s - ver:%s\n", header, folderName, fileVer.String()))
 
 		if cf.fileType == Command {
-			if err := addCommand(steps, cf); err != nil {
+			if err := p.addCommand(steps, cf); err != nil {
 				return false, err
 			}
 		} else {
@@ -178,7 +178,7 @@ func parseArgs(line string) []string {
 	return args
 }
 
-func addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
+func (p *Planner) addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
 	content, err := os.ReadFile(cf.path)
 	if err != nil {
 		return err
@@ -202,14 +202,13 @@ func addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
 			break
 		}
 
-		switch {
-		case args[0] != "graph-tool":
-			return errors.New("only graph-tool is now supported")
-		case len(args) < 2:
-			return errors.New("graph-tool requires command to run")
-		case args[1] == "plan", args[1] == "apply":
-			return errors.New("'plan' and 'apply' is not allowed to run recursively")
+		fullPath, exists := p.config.Planner.AllowedCommands[args[0]]
+		if !exists {
+			return fmt.Errorf("command '%s' from file '%s' is not listed in configuration allowed command section",
+				args[0], cf.FilePath())
 		}
+
+		args[0] = fullPath
 
 		newCommands++
 		steps.AddCommand(args)

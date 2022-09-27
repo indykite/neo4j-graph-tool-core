@@ -55,9 +55,10 @@ type (
 	}
 
 	Planner struct {
-		Batches      map[string]*BatchDetail  `mapstructure:"batches"`
-		SchemaFolder *SchemaFolder            `mapstructure:"schema_folder"`
-		Folders      map[string]*FolderDetail `mapstructure:"folders"`
+		Batches         map[string]*BatchDetail  `mapstructure:"batches"`
+		SchemaFolder    *SchemaFolder            `mapstructure:"schema_folder"`
+		Folders         map[string]*FolderDetail `mapstructure:"folders"`
+		AllowedCommands map[string]string        `mapstructure:"allowed_commands"`
 
 		BaseFolder     string `mapstructure:"base_folder"`
 		DropCypherFile string `mapstructure:"drop_cypher_file"`
@@ -235,6 +236,15 @@ func (c *Config) validatePlanner() error {
 	}
 	if label, ok := duplicateElements(c.Planner.SchemaFolder.NodeLabels); ok {
 		return fmt.Errorf("duplicate label '%s' in schemaFolder", label)
+	}
+
+	for cmd, path := range c.Planner.AllowedCommands {
+		if cmd == "" {
+			return errors.New("command name cannot be empty")
+		}
+		if path == "" {
+			return fmt.Errorf("path to command '%s' cannot be empty", cmd)
+		}
 	}
 
 	return nil

@@ -82,14 +82,19 @@ var _ = Describe("Scanner Errors", func() {
 
 var _ = Describe("Scanner", func() {
 	var (
-		vf planner.VersionFolders
-		p  *planner.Planner
+		plannerCfg *config.Config
+		vf         planner.VersionFolders
+		p          *planner.Planner
 	)
 
 	BeforeEach(func() {
-		c := &config.Config{Planner: &config.Planner{
-			BaseFolder:   "import",
-			SchemaFolder: &config.SchemaFolder{FolderName: "schema", MigrationType: config.DefaultSchemaMigrationType},
+		plannerCfg = &config.Config{Planner: &config.Planner{
+			BaseFolder: "import",
+			SchemaFolder: &config.SchemaFolder{
+				FolderName:    "schema",
+				MigrationType: config.DefaultSchemaMigrationType,
+			},
+			AllowedCommands: map[string]string{"graph-tool": "/app/graph-tool"},
 			Folders: map[string]*config.FolderDetail{
 				"data": {MigrationType: config.DefaultFolderMigrationType, NodeLabels: []string{"DataVersion"}},
 				"perf": {MigrationType: config.DefaultFolderMigrationType},
@@ -99,10 +104,10 @@ var _ = Describe("Scanner", func() {
 				"perf-seed": {Folders: []string{"data", "perf"}},
 			},
 		}}
-		err := c.Normalize()
+		err := plannerCfg.Normalize()
 		Expect(err).To(Succeed())
 
-		p, err = planner.NewPlanner(c)
+		p, err = planner.NewPlanner(plannerCfg)
 		Expect(err).To(Succeed())
 
 		s, err := p.NewScanner("testdata/import")
@@ -355,6 +360,20 @@ var _ = Describe("Scanner", func() {
 		}, "1.0.2+2"),
 	)
 
+	It("Fails on not allowed command", func() {
+		// Little hack to change config
+		plannerCfg.Planner.AllowedCommands = nil
+
+		pp, err := planner.NewPlanner(plannerCfg)
+		Expect(err).To(Succeed())
+
+		buf := new(planner.ExecutionSteps)
+		changed, err := pp.Upgrade(vf, nil, nil, "perf-seed", p.CreateBuilder(buf, false))
+		Ω(err).To(MatchError("command 'graph-tool' from file 'testdata/import/schema/v1.0.0/02_up_test_cmd.run' " +
+			"is not listed in configuration allowed command section"))
+		Ω(changed).To(BeNil())
+	})
+
 	It("Create Upgrade plan", func() {
 		buf := new(planner.ExecutionSteps)
 		changed, err := p.Upgrade(vf, nil, nil, "perf-seed", p.CreateBuilder(buf, false))
@@ -369,7 +388,7 @@ MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder schema - ver:1.0.0+02
->>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
+>>> /app/graph-tool jkl --text "some with spaces"
 :param version => '1.0.0';
 :param revision => 2;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
@@ -411,8 +430,8 @@ MERGE (sm:DataVersion {version: $version})
 SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder data - ver:1.0.1+03
->>> graph-tool abc -n 456 --address ***** --username ***** --password *****
->>> graph-tool jkl --address ***** --username ***** --password *****
+>>> /app/graph-tool abc -n 456
+>>> /app/graph-tool jkl
 :param version => '1.0.1';
 :param revision => 3;
 MERGE (sm:DataVersion {version: $version})
@@ -496,7 +515,7 @@ MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})
 SET sm.file = $revision, sm.ts = datetime();
 
 // Running command for folder schema - ver:1.0.1+02
->>> graph-tool jkl --text "some with spaces" --address ***** --username ***** --password *****
+>>> /app/graph-tool jkl --text "some with spaces"
 :param version => '1.0.1';
 :param revision => 1;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version})

@@ -10,6 +10,10 @@ cypher_shell_format = "verbose"
 base_folder = 'all-data'
 drop_cypher_file = 'drop-file.cypher'
 
+[planner.allowed_commands]
+graph-tool = "/app/graph-tool"
+another-tool = "/var/path/to/another-tool"
+
 [planner.schema_folder]
 folder_name = 'base-schema'
 migration_type = 'up_down'

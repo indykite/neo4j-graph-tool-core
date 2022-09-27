@@ -428,12 +428,10 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 				"cypher-shell", "--fail-fast", "--format", w.cfg.Supervisor.CypherShellFormat, "-d", "neo4j")
 		} else {
 			toExec := step.Command()
-			switch toExec[0] {
-			case "exit":
+			if toExec[0] == "exit" {
 				continue
-			case "graph-tool":
-				toExec[0] = graphToolPath
 			}
+
 			_, err = w.startUtility(true, nil, toExec...)
 		}
 		if err != nil {

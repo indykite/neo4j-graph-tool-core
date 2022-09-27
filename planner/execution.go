@@ -94,7 +94,7 @@ func (e ExecutionSteps) String() string {
 		default:
 			s.WriteString(">>> ")
 			s.WriteString(argsToString(v.command))
-			s.WriteString(" --address ***** --username ***** --password *****\n")
+			s.WriteRune('\n')
 		}
 	}
 	return s.String()
