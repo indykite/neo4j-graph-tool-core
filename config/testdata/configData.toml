@@ -1,14 +1,15 @@
 [supervisor]
 port = 5566
 log_level = 'warn'
-graph_version = 'v1.0.0'
+default_graph_version = 'v1.0.0'
 initial_batch = "schema"
 neo4j_auth = "username/password"
-cypher_shell_format = "verbose"
+neo4j_database = "my_db"
 
 [planner]
 base_folder = 'all-data'
 drop_cypher_file = 'drop-file.cypher'
+cypher_shell_format = "verbose"
 
 [planner.allowed_commands]
 graph-tool = "/app/graph-tool"

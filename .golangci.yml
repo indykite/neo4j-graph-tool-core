@@ -16,16 +16,16 @@ linters:
         - bidichk
         - contextcheck
         - durationcheck
-        # - dupword # Available since 1.50
+        - dupword
         - exhaustive
         - gci
         - gocritic
-        # - godot # TODO Enable before publishing
+        - godot
         - gofmt
         - goheader
         - gosec
         - lll
-        # - loggercheck # Available since 1.50
+        - loggercheck
         - nakedret
         - prealloc
         - prealloc
@@ -33,7 +33,7 @@ linters:
         - testpackage
         - unconvert
         - unconvert
-        # - unparam # Lot's of false positives now, consider in future
+        - unparam # Lot's of false positives now, consider in future
         - whitespace
 
 linters-settings:
@@ -67,7 +67,7 @@ linters-settings:
         values:
             regexp:
                 # As long we decide which format of YEAR in copyright we want, add this hack
-                our_year: 202[2] # Just change to 202[2-3] or other when changed
+                our_year: 202[3] # Just change to 202[3-4] or other when changed
         template: |-
             Copyright (c) {{OUR_YEAR}} IndyKite
 
@@ -142,3 +142,6 @@ issues:
         - linters:
               - revive
           source: func\([\S ]+\}\(\) # Ignore one-liners - false positive, fix from revive is coming
+        - linters:
+              - lll
+          source: '^//go:'

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ type errorWrap struct {
 	err error
 }
 
-// TSCmd is embedding os/exec.Cmd and adding WaitTS (wait thread safe) function
+// TSCmd is embedding os/exec.Cmd and adding WaitTS (wait thread safe) function.
 type TSCmd struct {
 	errWrap *errorWrap
 	exec.Cmd

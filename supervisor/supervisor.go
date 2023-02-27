@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/indykite/neo4j-graph-tool-core/config"
-	"github.com/indykite/neo4j-graph-tool-core/planner"
+	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
 type supervisor struct {
@@ -38,12 +38,12 @@ type supervisor struct {
 	log        logrus.FieldLogger
 	httpServer *httpServer
 
-	schemaVersion *planner.GraphVersion
-	initialBatch  planner.Batch
+	defaultGraphVersion *migrator.TargetVersion
+	initialBatch        migrator.Batch
 }
 
 // Start the HTTP Supervisor server, Neo4j DB and load initial data.
-// Returns error when config is not valid
+// Returns error when config is not valid.
 func Start(cfg *config.Config) error {
 	var err error
 
@@ -58,12 +58,12 @@ func Start(cfg *config.Config) error {
 
 	log := logrus.New()
 	log.SetLevel(stringToLogrusLogLevel(cfg.Supervisor.LogLevel))
-	log.Formatter = &nested.Formatter{FieldsOrder: []string{ComponentLogKey}}
+	log.Formatter = &nested.Formatter{FieldsOrder: []string{componentLogKey}}
 
 	log.Info("Starting supervisor")
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	neo4j := NewNeo4jWrapper(ctx, cfg, log.WithField(ComponentLogKey, "wrapper"))
+	neo4j := NewNeo4jWrapper(ctx, cfg, log.WithField(componentLogKey, "wrapper"))
 
 	s := &supervisor{
 		context:   ctx,
@@ -78,7 +78,7 @@ func Start(cfg *config.Config) error {
 	}
 
 	// Start HTTP server in background thread
-	s.httpServer = runHTTPServer(ctx, neo4j, log, s.schemaVersion, s.initialBatch)
+	s.httpServer = runHTTPServer(neo4j, log, s.defaultGraphVersion, s.initialBatch)
 
 	// Always start Neo4j when supervisor is started
 	err = neo4j.Start()
@@ -99,17 +99,17 @@ func Start(cfg *config.Config) error {
 func (s *supervisor) loadBatchTarget() error {
 	var err error
 
-	if v := s.cfg.Supervisor.GraphVersion; v != "" {
-		s.schemaVersion, err = planner.ParseGraphVersion(v)
+	if v := s.cfg.Supervisor.DefaultGraphVersion; v != "" {
+		s.defaultGraphVersion, err = migrator.ParseTargetVersion(v)
 		if err != nil {
 			return fmt.Errorf("invalid graph version '%s': %w", v, err)
 		}
-		s.log.WithField("version", s.schemaVersion).Debug("Target Graph Version is set")
+		s.log.WithField("version", s.defaultGraphVersion).Debug("Target Graph Version is set")
 	} else {
 		s.log.Warn("Target GraphModel is not set")
 	}
 
-	s.initialBatch = planner.Batch(s.cfg.Supervisor.InitialBatch)
+	s.initialBatch = migrator.Batch(s.cfg.Supervisor.InitialBatch)
 	s.log.WithField("batch", s.cfg.Supervisor.InitialBatch).Debug("Initial batch is set")
 
 	return nil
@@ -133,7 +133,7 @@ func (s *supervisor) bootstrapDB() {
 		return
 	}
 
-	err = s.neo4j.RefreshData(s.schemaVersion, false, true, s.initialBatch)
+	err = s.neo4j.RefreshData(s.defaultGraphVersion, false, true, s.initialBatch)
 	if err != nil {
 		s.log.WithError(err).Error("failed to bootstrap database")
 	}

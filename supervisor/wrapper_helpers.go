@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/sirupsen/logrus"
 
-	"github.com/indykite/neo4j-graph-tool-core/planner"
+	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
 // Driver returns new Neo4j driver for custom Cypher calls with set up authorization based on config in Wrapper.
@@ -44,6 +44,8 @@ func (w *Neo4jWrapper) getImportDir() string {
 	return path
 }
 
+// getNeo4jBasicAuth returns username, password and realm just like neo4j.BasicAuth() requires.
+// nolint:unparam
 func (w *Neo4jWrapper) getNeo4jBasicAuth() (username string, password string, realm string) {
 	auth := strings.SplitN(w.cfg.Supervisor.Neo4jAuth, "/", 2)
 	if len(auth) == 2 {
@@ -53,7 +55,7 @@ func (w *Neo4jWrapper) getNeo4jBasicAuth() (username string, password string, re
 	return "", "", ""
 }
 
-func (w *Neo4jWrapper) drop(steps *planner.ExecutionSteps) error {
+func (w *Neo4jWrapper) drop(steps *migrator.ExecutionSteps) error {
 	if w.cfg.Planner.DropCypherFile == "" {
 		return errors.New("drop cypher file is not specified")
 	}
@@ -70,5 +72,5 @@ func (w *Neo4jWrapper) drop(steps *planner.ExecutionSteps) error {
 }
 
 func (w *Neo4jWrapper) utilsLog(utilName string) *logrus.Entry {
-	return w.log.WithField(ComponentLogKey, utilName)
+	return w.log.WithField(componentLogKey, utilName)
 }

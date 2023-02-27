@@ -11,6 +11,9 @@ gci:
 	@echo "==> Fixing imports code with gci"
 	gci write -s standard -s default -s "prefix(github.com/indykite/neo4j-graph-tool-core)" -s blank -s dot .
 
+generate_mocks:
+	cd migrator && go generate
+
 test:
 	go test -v -cpu 4 -covermode=count -coverpkg github.com/indykite/neo4j-graph-tool-core/... -coverprofile=coverage.out ./...
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 package supervisor
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -23,7 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 
-	"github.com/indykite/neo4j-graph-tool-core/planner"
+	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
 type httpServer struct {
@@ -31,23 +30,22 @@ type httpServer struct {
 	log, httpLog logrus.FieldLogger
 	srv          *http.Server
 
-	defaultTarget *planner.GraphVersion
-	defaultBatch  planner.Batch
+	defaultTargetVersion *migrator.TargetVersion
+	defaultBatch         migrator.Batch
 }
 
 func runHTTPServer(
-	ctx context.Context,
 	neo4j *Neo4jWrapper,
 	logger logrus.FieldLogger,
-	target *planner.GraphVersion,
-	batch planner.Batch,
+	targetVersion *migrator.TargetVersion,
+	batch migrator.Batch,
 ) *httpServer {
 	s := &httpServer{
-		neo4j:         neo4j,
-		log:           logger,
-		httpLog:       logger.WithField(ComponentLogKey, "http"),
-		defaultTarget: target,
-		defaultBatch:  batch,
+		neo4j:                neo4j,
+		log:                  logger,
+		httpLog:              logger.WithField(componentLogKey, "http"),
+		defaultTargetVersion: targetVersion,
+		defaultBatch:         batch,
 	}
 
 	// Prepare HTTP server routes
@@ -154,7 +152,7 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 
 		loadBatch := s.defaultBatch
 		if v, ok := c.GetQuery("batch"); ok {
-			loadBatch = planner.Batch(v)
+			loadBatch = migrator.Batch(v)
 		}
 		if err := s.neo4j.RefreshData(gs, dryRun, clean, loadBatch); err == nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -169,7 +167,7 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 
 func (s *httpServer) versionHandler(c *gin.Context) {
 	// config is validated in supervisor
-	p, _ := planner.NewPlanner(s.neo4j.cfg)
+	p, _ := migrator.NewPlanner(s.neo4j.cfg)
 	driver, err := s.neo4j.Driver()
 	if err != nil {
 		s.sendError(c, err)
@@ -192,12 +190,12 @@ func (s *httpServer) sendError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"status": http.StatusInternalServerError, "error": err.Error()})
 }
 
-func (s *httpServer) parseTargetParams(c *gin.Context) (*planner.GraphVersion, error) {
+func (s *httpServer) parseTargetParams(c *gin.Context) (*migrator.TargetVersion, error) {
 	version := c.Param("version")
 	if version == "" {
-		return s.defaultTarget, nil
+		return s.defaultTargetVersion, nil
 	}
-	gVer, err := planner.ParseGraphVersion(version)
+	gVer, err := migrator.ParseTargetVersion(version)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "version: " + err.Error()})
 		return nil, err

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/indykite/neo4j-graph-tool-core/config"
-	"github.com/indykite/neo4j-graph-tool-core/planner"
+	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
 type Neo4jState string
@@ -37,7 +37,7 @@ const (
 	boltCheckSec          = 2
 	boltCheckQuitAfterSec = 5 * 60
 	initialDataDir        = "/initial-data/"
-	ComponentLogKey       = "system"
+	componentLogKey       = "system"
 	dockerEntryPointPath  = "/startup/docker-entrypoint.sh"
 	graphToolPath         = "/app/graph-tool"
 
@@ -51,7 +51,7 @@ const (
 var (
 	processArgs       = []string{dockerEntryPointPath, "neo4j"}
 	cancelWaitingChan chan os.Signal
-	// Semaphore supports TryAcquire which can checks locks only, and not block execution
+	// Semaphore supports TryAcquire which can checks locks only, and not block execution.
 	serviceSem = semaphore.NewWeighted(1)
 	spinUpMux  = &sync.Mutex{}
 	utilsMux   = &sync.Mutex{}
@@ -68,7 +68,7 @@ type Neo4jWrapper struct {
 	serviceState Neo4jState
 }
 
-// NewNeo4jWrapper creates wrapper for handling Neo4j and utilities
+// NewNeo4jWrapper creates wrapper for handling Neo4j and utilities.
 func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry) *Neo4jWrapper {
 	return &Neo4jWrapper{
 		context:      ctx,
@@ -79,7 +79,7 @@ func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry)
 	}
 }
 
-// State returns the current service state
+// State returns the current service state.
 func (w *Neo4jWrapper) State() (Neo4jState, error) {
 	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return Failed, err
@@ -88,7 +88,7 @@ func (w *Neo4jWrapper) State() (Neo4jState, error) {
 	return w.serviceState, nil
 }
 
-// setState sets the current service state
+// setState sets the current service state.
 func (w *Neo4jWrapper) setState(state Neo4jState) error {
 	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return err
@@ -98,7 +98,7 @@ func (w *Neo4jWrapper) setState(state Neo4jState) error {
 	return nil
 }
 
-// AllStates returns the current states of main service and all utilities
+// AllStates returns the current states of main service and all utilities.
 func (w *Neo4jWrapper) AllStates() map[string]interface{} {
 	state, err := w.State()
 	m := map[string]interface{}{"neo4j": state}
@@ -114,7 +114,7 @@ func (w *Neo4jWrapper) AllStates() map[string]interface{} {
 	return m
 }
 
-// Start the main neo4j process
+// Start the main neo4j process.
 func (w *Neo4jWrapper) Start() error {
 	// Ensure there are no multiple operations running at the same time
 	if !serviceSem.TryAcquire(1) {
@@ -127,7 +127,7 @@ func (w *Neo4jWrapper) Start() error {
 	w.log.Debug("Starting neo4j process")
 	w.serviceState = Starting
 	var err error
-	w.serviceCmd, err = StartCmd(w.log.WithField(ComponentLogKey, "neo4j"), nil, processArgs...)
+	w.serviceCmd, err = StartCmd(w.log.WithField(componentLogKey, "neo4j"), nil, processArgs...)
 	if err != nil {
 		w.serviceState = Failed
 		return fmt.Errorf("cannot start neo4j - %v", err.Error())
@@ -140,8 +140,8 @@ func (w *Neo4jWrapper) Start() error {
 	return nil
 }
 
-// Stop the main neo4j process, but does not wait. Use WaitAll() to wait process is exited
-// To stop all started processes use StopAll() and WaitAll() optionally
+// Stop the main neo4j process, but does not wait. Use WaitAll() to wait process is exited.
+// To stop all started processes use StopAll() and WaitAll() optionally.
 func (w *Neo4jWrapper) Stop() error {
 	// Always run Stop and do not fail, so wait until semaphore is released.
 	// For example calling stop during starting, it should wait and stop
@@ -192,7 +192,7 @@ func (w *Neo4jWrapper) Stop() error {
 	return nil
 }
 
-// Restart call Stop, Wait and Start
+// Restart call Stop, Wait and Start.
 func (w *Neo4jWrapper) Restart() error {
 	stopErr := w.Stop()
 
@@ -229,8 +229,8 @@ func (w *Neo4jWrapper) StopAll() error {
 	return w.Stop()
 }
 
-// Wait waits until main process is exited
-// To wait for utilities use WaitAll
+// Wait waits until main process is exited.
+// To wait for utilities use WaitAll.
 func (w *Neo4jWrapper) Wait() error {
 	// Create copy of TSCmd to avoid locking all other methods when waiting
 	if err := serviceSem.Acquire(w.context, 1); err != nil {
@@ -246,7 +246,7 @@ func (w *Neo4jWrapper) Wait() error {
 	return nil
 }
 
-// WaitAll waits until main process and all scripts exit
+// WaitAll waits until main process and all scripts exit.
 func (w *Neo4jWrapper) WaitAll() error {
 	w.log.Debug("Waiting for all processes to exit")
 	_ = w.Wait()
@@ -267,8 +267,8 @@ func (w *Neo4jWrapper) WaitAll() error {
 	return nil
 }
 
-// WaitForNeo4j blocks execution until Neo4j is ready, or returns error if service is not starting
-// Also returns error after 5 minutes of trying to wait
+// WaitForNeo4j blocks execution until Neo4j is ready, or returns error if service is not starting.
+// Also returns error after 5 minutes of trying to wait.
 func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 	// Block the function until Neo4j is ready.
 	// Only first call to this method will start net.Dial, others are just waiting
@@ -338,16 +338,24 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 	return fmt.Errorf("cannot wait for Neo4j, service is '%s'", w.serviceState)
 }
 
-// RefreshData imports all data from schema import folder
-func (w *Neo4jWrapper) RefreshData(target *planner.GraphVersion, dryRun, clean bool, batchName planner.Batch) error {
-	err := w.update(target, dryRun, clean, batchName)
+// RefreshData imports all data from schema import folder.
+func (w *Neo4jWrapper) RefreshData(
+	targetVersion *migrator.TargetVersion,
+	dryRun, clean bool,
+	batchName migrator.Batch,
+) error {
+	err := w.update(targetVersion, dryRun, clean, batchName)
 	if err != nil {
 		return fmt.Errorf("importing data failed: %v", err)
 	}
 	return nil
 }
 
-func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, batchName planner.Batch) error {
+func (w *Neo4jWrapper) update(
+	targetVersion *migrator.TargetVersion,
+	dryRun, clean bool,
+	batchName migrator.Batch,
+) error {
 	state, err := w.State()
 	if err != nil {
 		return err
@@ -359,13 +367,13 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		"clean":  clean,
 		"batch":  batchName,
 		"dryRun": dryRun,
-		"target": target,
+		"target": targetVersion,
 	}).Debug("Refreshing data")
 
 	// We already validated config before
-	p, _ := planner.NewPlanner(w.cfg)
+	p, _ := migrator.NewPlanner(w.cfg)
 
-	var dbModel planner.DatabaseModel
+	var dbModel migrator.DatabaseModel
 	if !clean {
 		w.log.Trace("Connecting to DB to fetch current version")
 		var d neo4j.Driver
@@ -386,27 +394,28 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 		return err
 	}
 	w.log.WithField("folder", w.getImportDir()).Trace("Scanning folders")
-	vf, err := scanner.ScanFolders()
+	lf, err := scanner.ScanFolders()
 	if err != nil {
 		return err
 	}
-	execSteps := new(planner.ExecutionSteps)
+	execSteps := new(migrator.ExecutionSteps)
 	if clean {
 		if err = w.drop(execSteps); err != nil {
 			return err
 		}
 	}
 
-	changed, err := p.Plan(vf, dbModel, target, batchName, p.CreateBuilder(execSteps, true))
+	err = p.Plan(lf, dbModel, targetVersion, batchName, p.CreateBuilder(execSteps, true))
 	if err != nil {
 		return err
 	}
 
-	if dryRun && changed != nil {
-		fmt.Print(execSteps.String())
-		return nil
-	} else if changed == nil {
+	switch {
+	case execSteps.IsEmpty():
 		w.log.Debug("Nothing to change")
+		return nil
+	case dryRun:
+		fmt.Print(execSteps.String())
 		return nil
 	}
 
@@ -415,24 +424,26 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 	}
 
 	user, pass, _ := w.getNeo4jBasicAuth()
-	if os.Getenv("NEO4J_USERNAME") == "" {
-		_ = os.Setenv("NEO4J_USERNAME", user)
-	}
-	if os.Getenv("NEO4J_PASSWORD") == "" {
-		_ = os.Setenv("NEO4J_PASSWORD", pass)
+	// Set environment variables, because the values might come from config.
+	// Those variables are added automatically to starting utility. And cypher-shell accept it.
+	// Custom commands should accept it as well in the same way as cypher-shell does.
+	_ = os.Setenv("NEO4J_USERNAME", user)
+	_ = os.Setenv("NEO4J_PASSWORD", pass)
+	if w.cfg.Supervisor.Neo4jDatabase != "" {
+		_ = os.Setenv("NEO4J_DATABASE", w.cfg.Supervisor.Neo4jDatabase)
 	}
 
 	for _, step := range *execSteps {
 		if step.IsCypher() {
-			_, err = w.startUtility(true, step.Cypher(),
-				"cypher-shell", "--fail-fast", "--format", w.cfg.Supervisor.CypherShellFormat, "-d", "neo4j")
+			err = w.startUtility(true, step.Cypher(),
+				"cypher-shell", "--fail-fast", "--format", w.cfg.Planner.CypherShellFormat)
 		} else {
 			toExec := step.Command()
 			if toExec[0] == "exit" {
 				continue
 			}
 
-			_, err = w.startUtility(true, nil, toExec...)
+			err = w.startUtility(true, nil, toExec...)
 		}
 		if err != nil {
 			w.log.Warnf("Failed to import file: %v", err)
@@ -447,18 +458,18 @@ func (w *Neo4jWrapper) update(target *planner.GraphVersion, dryRun, clean bool, 
 	return err
 }
 
-func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) (*TSCmd, error) {
+func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) error {
 	utilName := args[0]
 	utilsMux.Lock()
 	ul := w.utilsLog(utilName)
 	if _, found := w.utilsCmd[utilName]; found {
 		ul.Debug("Utility cannot be started more than once")
-		return nil, fmt.Errorf("utility '%s' is already running", utilName)
+		return fmt.Errorf("utility '%s' is already running", utilName)
 	}
 	ul.Trace("Starting utility")
 	cmd, err := StartCmd(ul, stdin, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	w.utilsCmd[utilName] = cmd
 	utilsMux.Unlock()
@@ -475,9 +486,9 @@ func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) 
 	}
 
 	if wait {
-		return nil, waitAndClean()
+		return waitAndClean()
 	}
 
 	go func() { _ = waitAndClean() }()
-	return cmd, nil
+	return nil
 }

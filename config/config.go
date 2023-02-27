@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ const (
 	DefaultNodeSubString       = "Version"
 	DefaultFolderMigrationType = "change"
 	DefaultInitialBatch        = "schema"
+	DefaultNeo4jDatabase       = "neo4j"
 	DefaultCypherShellFormat   = "auto"
 )
 
@@ -46,12 +47,12 @@ type (
 	}
 
 	Supervisor struct {
-		LogLevel          string `mapstructure:"log_level"`
-		GraphVersion      string `mapstructure:"graph_version"`
-		InitialBatch      string `mapstructure:"initial_batch"`
-		Neo4jAuth         string `mapstructure:"neo4j_auth"`
-		CypherShellFormat string `mapstructure:"cypher_shell_format"`
-		Port              int    `mapstructure:"port"`
+		LogLevel            string `mapstructure:"log_level"`
+		DefaultGraphVersion string `mapstructure:"default_graph_version"`
+		InitialBatch        string `mapstructure:"initial_batch"`
+		Neo4jAuth           string `mapstructure:"neo4j_auth"`
+		Neo4jDatabase       string `mapstructure:"neo4j_database"`
+		Port                int    `mapstructure:"port"`
 	}
 
 	Planner struct {
@@ -60,8 +61,9 @@ type (
 		Folders         map[string]*FolderDetail `mapstructure:"folders"`
 		AllowedCommands map[string]string        `mapstructure:"allowed_commands"`
 
-		BaseFolder     string `mapstructure:"base_folder"`
-		DropCypherFile string `mapstructure:"drop_cypher_file"`
+		BaseFolder        string `mapstructure:"base_folder"`
+		DropCypherFile    string `mapstructure:"drop_cypher_file"`
+		CypherShellFormat string `mapstructure:"cypher_shell_format"`
 	}
 
 	SchemaFolder struct {
@@ -88,19 +90,19 @@ var (
 	cypherShellFormatValues = []string{"auto", "verbose", "plain"}
 )
 
-// New creates a new config containing values from environment variables and default values
+// New creates a new config containing values from environment variables and default values.
 func New() (*Config, error) {
 	return LoadFile("")
 }
 
-// LoadFile loads file into config, together with values from environment variables and default values
+// LoadFile loads file into config, together with values from environment variables and default values.
 func LoadFile(fileName string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(fileName)
 	if err := v.ReadInConfig(); err != nil {
-		// If SetConfigFile is used, and config is not found, fs.PathError is returned, do not ignore this error
+		// If SetConfigFile is used, and config is not found, fs.PathError is returned, do not ignore this error.
 		// But if no config is found in ConfigPath with ConfigName, viper.ConfigFileNotFoundError is returned
-		// and we want to ignore that error, as config is not really mandatory for us
+		// and we want to ignore that error, as config is not really mandatory for us.
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err
 		}
@@ -109,17 +111,18 @@ func LoadFile(fileName string) (*Config, error) {
 	v.SetDefault("supervisor.port", DefaultPort)
 	v.SetDefault("supervisor.log_level", DefaultLogLevel)
 	v.SetDefault("supervisor.initial_batch", DefaultInitialBatch)
-	v.SetDefault("supervisor.cypher_shell_format", DefaultCypherShellFormat)
+	v.SetDefault("supervisor.neo4j_database", DefaultNeo4jDatabase)
 	v.SetDefault("planner.drop_cypher_file", DefaultDropCypherFile)
 	v.SetDefault("planner.base_folder", DefaultBaseFolder)
 	v.SetDefault("planner.schema_folder.folder_name", DefaultSchemaFolderName)
 	v.SetDefault("planner.schema_folder.migration_type", DefaultSchemaMigrationType)
+	v.SetDefault("planner.cypher_shell_format", DefaultCypherShellFormat)
 
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.SetEnvPrefix("GT")
 	_ = v.BindEnv("supervisor.initial_batch", "GRAPH_MODEL_KIND")
-	_ = v.BindEnv("supervisor.graph_version", "GRAPH_MODEL_VERSION")
+	_ = v.BindEnv("supervisor.default_graph_version", "GRAPH_MODEL_VERSION")
 	_ = v.BindEnv("supervisor.neo4j_auth", "NEO4J_AUTH")
 
 	c := &Config{}
@@ -149,7 +152,7 @@ func (c *Config) Validate() error {
 }
 
 // ValidateWithSupervisor validates that data in Config struct are filled in correctly with mandatory supervisor part.
-// This is like Validate() but if Supervisor is missing, error will be thrown
+// This is like Validate() but if Supervisor is missing, error will be thrown.
 func (c *Config) ValidateWithSupervisor() error {
 	if err := c.validateStructure(true); err != nil {
 		return err
@@ -190,8 +193,8 @@ func (c *Config) validateSupervisor() error {
 		return nil
 	}
 
-	if c.Supervisor.GraphVersion != "" {
-		_, err := semver.NewVersion(c.Supervisor.GraphVersion)
+	if c.Supervisor.DefaultGraphVersion != "" {
+		_, err := semver.NewVersion(c.Supervisor.DefaultGraphVersion)
 		if err != nil {
 			return err
 		}
@@ -206,14 +209,13 @@ func (c *Config) validateSupervisor() error {
 		return errors.New("port number must be in range 1024 - 65535")
 	}
 
+	if c.Supervisor.Neo4jAuth != "" && !strings.Contains(c.Supervisor.Neo4jAuth, "/") {
+		return errors.New("neo4j auth must be in format username/passsword")
+	}
+
 	if !stringInArray(logLevelValues, c.Supervisor.LogLevel) {
 		return fmt.Errorf("log_level value '%s' is invalid, must be one of '%s'",
 			c.Supervisor.LogLevel, strings.Join(logLevelValues, ","))
-	}
-
-	if !stringInArray(cypherShellFormatValues, c.Supervisor.CypherShellFormat) {
-		return fmt.Errorf("cypher_shell_format value '%s' is invalid, must be one of '%s'",
-			c.Supervisor.CypherShellFormat, strings.Join(cypherShellFormatValues, ","))
 	}
 
 	return nil
@@ -238,6 +240,11 @@ func (c *Config) validatePlanner() error {
 		return fmt.Errorf("duplicate label '%s' in schemaFolder", label)
 	}
 
+	if !stringInArray(cypherShellFormatValues, c.Planner.CypherShellFormat) {
+		return fmt.Errorf("cypher_shell_format value '%s' is invalid, must be one of '%s'",
+			c.Planner.CypherShellFormat, strings.Join(cypherShellFormatValues, ","))
+	}
+
 	for cmd, path := range c.Planner.AllowedCommands {
 		if cmd == "" {
 			return errors.New("command name cannot be empty")
@@ -255,12 +262,14 @@ func (c *Config) validateFoldersAndBatches() error {
 
 	// Planner.Folders parts
 	for folderName, folderDetail := range c.Planner.Folders {
-		if folderName == "" {
+		switch folderName {
+		case "":
 			return fmt.Errorf("name of folder in Planner.Folders can't be an empty string")
-		}
-		if folderName == c.Planner.SchemaFolder.FolderName {
+		case c.Planner.SchemaFolder.FolderName:
 			return fmt.Errorf(
 				"folder '%s' is used as schema folder and cannot be used again in planner.folders", folderName)
+		case "snapshots":
+			return errors.New("name 'snapshots' is reserved name and cannot be used in planner.folders")
 		}
 
 		if folderDetail == nil {
@@ -343,6 +352,10 @@ func (c *Config) Normalize() error {
 		if len(folder.NodeLabels) == 0 {
 			folder.NodeLabels = []string{DefaultNodeLabel, generateLabelName(folderName)}
 		}
+	}
+
+	if c.Planner.CypherShellFormat == "" {
+		c.Planner.CypherShellFormat = DefaultCypherShellFormat
 	}
 
 	// Supervisor might not be defined

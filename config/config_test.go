@@ -1,4 +1,4 @@
-// Copyright (c) 2022 IndyKite
+// Copyright (c) 2023 IndyKite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,16 +28,17 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":              Equal(5566),
-				"LogLevel":          Equal("warn"),
-				"GraphVersion":      Equal("v1.0.0"),
-				"InitialBatch":      Equal("schema"),
-				"Neo4jAuth":         Equal("username/password"),
-				"CypherShellFormat": Equal("verbose"),
+				"Port":                Equal(5566),
+				"LogLevel":            Equal("warn"),
+				"DefaultGraphVersion": Equal("v1.0.0"),
+				"InitialBatch":        Equal("schema"),
+				"Neo4jAuth":           Equal("username/password"),
+				"Neo4jDatabase":       Equal("my_db"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
-				"BaseFolder":     Equal("all-data"),
-				"DropCypherFile": Equal("drop-file.cypher"),
+				"BaseFolder":        Equal("all-data"),
+				"DropCypherFile":    Equal("drop-file.cypher"),
+				"CypherShellFormat": Equal("verbose"),
 				"AllowedCommands": MatchAllKeys(Keys{
 					"another-tool": Equal("/var/path/to/another-tool"),
 					"graph-tool":   Equal("/app/graph-tool"),
@@ -73,13 +74,14 @@ var _ = Describe("LoadFile", func() {
 		closer := envSetter(map[string]string{
 			"GT_SUPERVISOR_LOG_LEVEL":              "error",
 			"GT_SUPERVISOR_PORT":                   "1500",
-			"GT_SUPERVISOR_GRAPH_VERSION":          "v1.0.0",
+			"GT_SUPERVISOR_DEFAULT_GRAPH_VERSION":  "v1.0.0",
 			"GT_SUPERVISOR_INITIAL_BATCH":          "data",
-			"GT_SUPERVISOR_NEO4J_AUTH":             "identification",
-			"GT_SUPERVISOR_CYPHER_SHELL_FORMAT":    "plain",
+			"GT_SUPERVISOR_NEO4J_AUTH":             "name/pass",
+			"GT_SUPERVISOR_NEO4J_DATABASE":         "another_db",
 			"GT_PLANNER_BASE_FOLDER":               "base-schema",
 			"GT_PLANNER_DROP_CYPHER_FILE":          "cypher.file",
 			"GT_PLANNER_SCHEMA_FOLDER_NODE_LABELS": "abc,def", // array of two elements
+			"GT_PLANNER_CYPHER_SHELL_FORMAT":       "plain",
 		})
 		GinkgoT().Cleanup(closer)
 
@@ -87,16 +89,17 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":              Equal(1500),
-				"LogLevel":          Equal("error"),
-				"GraphVersion":      Equal("v1.0.0"),
-				"InitialBatch":      Equal("data"),
-				"Neo4jAuth":         Equal("identification"),
-				"CypherShellFormat": Equal("plain"),
+				"Port":                Equal(1500),
+				"LogLevel":            Equal("error"),
+				"DefaultGraphVersion": Equal("v1.0.0"),
+				"InitialBatch":        Equal("data"),
+				"Neo4jAuth":           Equal("name/pass"),
+				"Neo4jDatabase":       Equal("another_db"),
 			})),
 			"Planner": PointTo(MatchFields(IgnoreExtras, Fields{
-				"BaseFolder":     Equal("base-schema"),
-				"DropCypherFile": Equal("cypher.file"),
+				"BaseFolder":        Equal("base-schema"),
+				"DropCypherFile":    Equal("cypher.file"),
+				"CypherShellFormat": Equal("plain"),
 				"SchemaFolder": PointTo(MatchAllFields(Fields{
 					"FolderName":    Equal("base-schema"),
 					"MigrationType": Equal(config.DefaultSchemaMigrationType),
@@ -110,7 +113,7 @@ var _ = Describe("LoadFile", func() {
 		closer := envSetter(map[string]string{
 			"GRAPH_MODEL_KIND":    "data",
 			"GRAPH_MODEL_VERSION": "v2.0.0",
-			"NEO4J_AUTH":          "identification",
+			"NEO4J_AUTH":          "name/pass",
 		})
 		GinkgoT().Cleanup(closer)
 
@@ -118,9 +121,9 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchFields(IgnoreExtras, Fields{
 			"Supervisor": PointTo(MatchFields(IgnoreExtras, Fields{
-				"GraphVersion": Equal("v2.0.0"),
-				"InitialBatch": Equal("data"),
-				"Neo4jAuth":    Equal("identification"),
+				"DefaultGraphVersion": Equal("v2.0.0"),
+				"InitialBatch":        Equal("data"),
+				"Neo4jAuth":           Equal("name/pass"),
 			})),
 		})))
 	})
@@ -130,18 +133,19 @@ var _ = Describe("LoadFile", func() {
 		Expect(err).To(Succeed())
 		Expect(res).To(PointTo(MatchAllFields(Fields{
 			"Supervisor": PointTo(MatchAllFields(Fields{
-				"Port":              Equal(config.DefaultPort),
-				"LogLevel":          Equal(config.DefaultLogLevel),
-				"GraphVersion":      HaveLen(0),
-				"InitialBatch":      Equal("schema"),
-				"Neo4jAuth":         HaveLen(0),
-				"CypherShellFormat": Equal("auto"),
+				"Port":                Equal(config.DefaultPort),
+				"LogLevel":            Equal(config.DefaultLogLevel),
+				"DefaultGraphVersion": HaveLen(0),
+				"InitialBatch":        Equal("schema"),
+				"Neo4jAuth":           HaveLen(0),
+				"Neo4jDatabase":       Equal("neo4j"),
 			})),
 			"Planner": PointTo(MatchAllFields(Fields{
-				"BaseFolder":      Equal(config.DefaultBaseFolder),
-				"DropCypherFile":  Equal(config.DefaultDropCypherFile),
-				"AllowedCommands": HaveLen(0),
-				"Batches":         HaveLen(0),
+				"BaseFolder":        Equal(config.DefaultBaseFolder),
+				"DropCypherFile":    Equal(config.DefaultDropCypherFile),
+				"CypherShellFormat": Equal("auto"),
+				"AllowedCommands":   HaveLen(0),
+				"Batches":           HaveLen(0),
 				"SchemaFolder": PointTo(MatchAllFields(Fields{
 					"FolderName":    Equal(config.DefaultSchemaFolderName),
 					"MigrationType": Equal(config.DefaultSchemaMigrationType),
@@ -181,16 +185,16 @@ var _ = Describe("Validation & Normalize", func() {
 	BeforeEach(func() {
 		configStruct = &config.Config{
 			Supervisor: &config.Supervisor{
-				Port:              config.DefaultPort,
-				LogLevel:          config.DefaultLogLevel,
-				InitialBatch:      "schema",
-				Neo4jAuth:         "auth",
-				CypherShellFormat: "plain",
+				Port:         config.DefaultPort,
+				LogLevel:     config.DefaultLogLevel,
+				InitialBatch: "schema",
+				Neo4jAuth:    "name/pass",
 			},
 			Planner: &config.Planner{
-				BaseFolder:      config.DefaultBaseFolder,
-				DropCypherFile:  config.DefaultDropCypherFile,
-				AllowedCommands: map[string]string{"graph-tool": "/app/graph-tool"},
+				BaseFolder:        config.DefaultBaseFolder,
+				DropCypherFile:    config.DefaultDropCypherFile,
+				AllowedCommands:   map[string]string{"graph-tool": "/app/graph-tool"},
+				CypherShellFormat: "plain",
 				SchemaFolder: &config.SchemaFolder{
 					FolderName:    config.DefaultSchemaFolderName,
 					MigrationType: config.DefaultFolderMigrationType,
@@ -229,13 +233,13 @@ var _ = Describe("Validation & Normalize", func() {
 	It("Successfully validate manual config", func() {
 		cfg := &config.Config{
 			Supervisor: &config.Supervisor{
-				Port:              2555,
-				LogLevel:          "debug",
-				InitialBatch:      "schema",
-				CypherShellFormat: "auto",
+				Port:         2555,
+				LogLevel:     "debug",
+				InitialBatch: "schema",
 			},
 			Planner: &config.Planner{
-				BaseFolder: "abc",
+				CypherShellFormat: "auto",
+				BaseFolder:        "abc",
 				SchemaFolder: &config.SchemaFolder{
 					FolderName:    "jkl",
 					MigrationType: "change",
@@ -315,6 +319,10 @@ var _ = Describe("Validation & Normalize", func() {
 			cfg.Planner.Folders[""] = &config.FolderDetail{}
 		}, MatchError("name of folder in Planner.Folders can't be an empty string")),
 
+		Entry("Folder name cannot be snapshots", func(cfg *config.Config) {
+			cfg.Planner.Folders["snapshots"] = &config.FolderDetail{}
+		}, MatchError("name 'snapshots' is reserved name and cannot be used in planner.folders")),
+
 		Entry("Batches key empty string", func(cfg *config.Config) {
 			cfg.Planner.Batches[""] = &config.BatchDetail{}
 		}, MatchError("name of batch in Planner.Batches can't be an empty string")),
@@ -341,16 +349,20 @@ var _ = Describe("Validation & Normalize", func() {
 			cfg.Supervisor.Port = 1000
 		}, MatchError("port number must be in range 1024 - 65535")),
 
+		Entry("Neo4j Auth", func(cfg *config.Config) {
+			cfg.Supervisor.Neo4jAuth = "abc"
+		}, MatchError("neo4j auth must be in format username/passsword")),
+
 		Entry("Log Level", func(cfg *config.Config) {
 			cfg.Supervisor.LogLevel = "xxx"
 		}, MatchError("log_level value 'xxx' is invalid, must be one of 'fatal,error,warn,warning,info,debug,trace'")),
 
 		Entry("CypherShellFormat", func(cfg *config.Config) {
-			cfg.Supervisor.CypherShellFormat = "xxx"
+			cfg.Planner.CypherShellFormat = "xxx"
 		}, MatchError("cypher_shell_format value 'xxx' is invalid, must be one of 'auto,verbose,plain'")),
 
 		Entry("Graph Version", func(cfg *config.Config) {
-			cfg.Supervisor.GraphVersion = "www"
+			cfg.Supervisor.DefaultGraphVersion = "www"
 		}, MatchError(ContainSubstring("Invalid Semantic Version"))),
 
 		Entry("Initial Batch", func(cfg *config.Config) {
