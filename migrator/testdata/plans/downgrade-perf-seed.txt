@@ -1,35 +1,42 @@
 // Downgrading folder schema - ver:1.0.2+2200
 :source testdata/import/schema/v1.0.2/2200_down_test.cypher;
-:params {"version": "1.0.2", "file": 2200}
+:param version => '1.0.2';
+:param file => 2200;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder schema - ver:1.0.2+2100
 :source testdata/import/schema/v1.0.2/2100_down_session.cypher;
-:params {"version": "1.0.2", "file": 2100}
+:param version => '1.0.2';
+:param file => 2100;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder schema - ver:1.0.2+1850
 :source testdata/import/schema/v1.0.2/1850_down_plan.cypher;
-:params {"version": "1.0.2", "file": 1850}
+:param version => '1.0.2';
+:param file => 1850;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder perf - ver:1.0.1+2800
 :source testdata/import/perf/v1.0.1/2800_down_contracts_2000.cypher;
-:params {"version": "1.0.1", "file": 2800}
+:param version => '1.0.1';
+:param file => 2800;
 MATCH (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading with command from folder schema - ver:1.0.1+1500
 >>> /app/graph-tool jkl --text "some with spaces"
-:params {"version": "1.0.1", "file": 1500}
+:param version => '1.0.1';
+:param file => 1500;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder perf - ver:1.0.1+1350
 :source testdata/import/perf/v1.0.1/1350_down_plansx1000.cypher;
-:params {"version": "1.0.1", "file": 1350}
+:param version => '1.0.1';
+:param file => 1350;
 MATCH (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder schema - ver:1.0.1+1200
 :source testdata/import/schema/v1.0.1/1200_down_plan.cypher;
-:params {"version": "1.0.1", "file": 1200}
+:param version => '1.0.1';
+:param file => 1200;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 

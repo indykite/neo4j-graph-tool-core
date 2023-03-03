@@ -181,8 +181,8 @@ func (p *Planner) CreateBuilder(steps *ExecutionSteps, abs bool) Builder {
 		if len(nodeLabels) == 0 {
 			return fmt.Errorf("fail to import folder '%s', cannot determine DB labels", cf.FolderName)
 		}
-		steps.AddCypher(
-			`:params {"version": "`, version.String(), `", "file": `, strconv.FormatInt(cf.Timestamp, 10), "}\n")
+		steps.AddCypher(":param version => '", version.String(), "';\n")
+		steps.AddCypher(":param file => ", strconv.FormatInt(cf.Timestamp, 10), ";\n")
 		if cf.IsDowngrade {
 			// Try to find version and then remove current file from files.
 			// Or delete whole node, when there are no more files left.

@@ -1,66 +1,79 @@
 // Importing folder data - ver:1.0.0+1400
 :source testdata/import/data/v1.0.0/1400_test.cypher;
-:params {"version": "1.0.0", "file": 1400}
+:param version => '1.0.0';
+:param file => 1400;
 MERGE (sm:DataVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder schema - ver:1.0.1+1200
 :source testdata/import/schema/v1.0.1/1200_up_plan.cypher;
-:params {"version": "1.0.1", "file": 1200}
+:param version => '1.0.1';
+:param file => 1200;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder data - ver:1.0.1+1300
 :source testdata/import/data/v1.0.1/1300_plans.cypher;
-:params {"version": "1.0.1", "file": 1300}
+:param version => '1.0.1';
+:param file => 1300;
 MERGE (sm:DataVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder perf - ver:1.0.1+1350
 :source testdata/import/perf/v1.0.1/1350_up_plansx1000.cypher;
-:params {"version": "1.0.1", "file": 1350}
+:param version => '1.0.1';
+:param file => 1350;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder data - ver:1.0.1+1400
 :source testdata/import/data/v1.0.1/1400_contracts.cypher;
-:params {"version": "1.0.1", "file": 1400}
+:param version => '1.0.1';
+:param file => 1400;
 MERGE (sm:DataVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder schema - ver:1.0.1+1500
 :source testdata/import/schema/v1.0.1/1500_up_contract.cypher;
-:params {"version": "1.0.1", "file": 1500}
+:param version => '1.0.1';
+:param file => 1500;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder perf - ver:1.0.1+2800
 :source testdata/import/perf/v1.0.1/2800_up_contracts_2000.cypher;
-:params {"version": "1.0.1", "file": 2800}
+:param version => '1.0.1';
+:param file => 2800;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Running command from folder data - ver:1.0.1+4800
 >>> /app/graph-tool abc -n 456
 >>> /app/graph-tool jkl
-:params {"version": "1.0.1", "file": 4800}
+:param version => '1.0.1';
+:param file => 4800;
 MERGE (sm:DataVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder schema - ver:1.0.2+1850
 :source testdata/import/schema/v1.0.2/1850_up_plan.cypher;
-:params {"version": "1.0.2", "file": 1850}
+:param version => '1.0.2';
+:param file => 1850;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder perf - ver:1.0.2+2010
 :source testdata/import/perf/v1.0.2/2010_up_p100.cypher;
-:params {"version": "1.0.2", "file": 2010}
+:param version => '1.0.2';
+:param file => 2010;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder schema - ver:1.0.2+2100
 :source testdata/import/schema/v1.0.2/2100_up_session.cypher;
-:params {"version": "1.0.2", "file": 2100}
+:param version => '1.0.2';
+:param file => 2100;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Importing folder schema - ver:1.0.2+2200
 :source testdata/import/schema/v1.0.2/2200_up_test.cypher;
-:params {"version": "1.0.2", "file": 2200}
+:param version => '1.0.2';
+:param file => 2200;
 MERGE (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Running command from folder perf - ver:1.0.2+2500
 // Nothing to do in this file
-:params {"version": "1.0.2", "file": 2500}
+:param version => '1.0.2';
+:param file => 2500;
 MERGE (sm:GraphToolMigration:PerfVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 

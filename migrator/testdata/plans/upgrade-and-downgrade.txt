@@ -1,15 +1,18 @@
 // Importing folder data - ver:1.0.0+1400
 :source testdata/import/data/v1.0.0/1400_test.cypher;
-:params {"version": "1.0.0", "file": 1400}
+:param version => '1.0.0';
+:param file => 1400;
 MERGE (sm:DataVersion {version: $version, file: $file}) ON CREATE SET sm.created_at = timestamp() SET sm.updated_at = timestamp(), sm.deleted_at = null;
 
 // Downgrading with command from folder schema - ver:1.0.1+1500
 >>> /app/graph-tool jkl --text "some with spaces"
-:params {"version": "1.0.1", "file": 1500}
+:param version => '1.0.1';
+:param file => 1500;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
 // Downgrading folder schema - ver:1.0.1+1200
 :source testdata/import/schema/v1.0.1/1200_down_plan.cypher;
-:params {"version": "1.0.1", "file": 1200}
+:param version => '1.0.1';
+:param file => 1200;
 MATCH (sm:GraphToolMigration:SchemaVersion {version: $version, file: $file}) SET sm.deleted_at = timestamp();
 
