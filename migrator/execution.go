@@ -50,11 +50,8 @@ func (s ExecutionStep) Command() []string {
 }
 
 // IsEmpty checks if there are steps to do.
-func (e *ExecutionSteps) IsEmpty() bool {
-	if e == nil {
-		return true
-	}
-	return len(*e) == 0
+func (e ExecutionSteps) IsEmpty() bool {
+	return len(e) == 0
 }
 
 // AddCypher adds all Cyphers into one buffer. If current step is Cypher as well, it is reused.

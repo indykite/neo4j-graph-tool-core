@@ -93,7 +93,11 @@ var _ = Describe("ExecutionSteps", func() {
 	})
 
 	It("Printing out command with spaces works properly", func() {
-		ess := migrator.ExecutionSteps{}
+		var ess migrator.ExecutionSteps
+		Expect(ess.IsEmpty()).To(BeTrue())
+		ess = migrator.ExecutionSteps{}
+		Expect(ess.IsEmpty()).To(BeTrue())
+
 		ess.AddCommand([]string{"my-cmd", "with spaces", "another text with spaces"})
 
 		Expect(ess).To(HaveLen(1))
