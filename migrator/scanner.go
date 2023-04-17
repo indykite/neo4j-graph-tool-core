@@ -547,6 +547,67 @@ func (s *Scanner) scanFolder(folderName, dirPath string, fileNamePattern *regexp
 	return scripts, nil
 }
 
+// GenerateMigrationFiles creates empty files based on config and passed arguments.
+func (s *Scanner) GenerateMigrationFiles(
+	folderName string,
+	version *TargetVersion,
+	migrationName string,
+	upType, downType FileType,
+) error {
+	isUpDown := false
+	if folderName == s.config.Planner.SchemaFolder.FolderName {
+		isUpDown = s.config.Planner.SchemaFolder.MigrationType == "up_down"
+	} else {
+		fd, has := s.config.Planner.Folders[folderName]
+		if !has {
+			return errors.New("folder does not exist: " + folderName)
+		}
+		isUpDown = fd.MigrationType == "up_down"
+	}
+
+	if version == nil || version.Version == nil || version.Revision == 0 {
+		return errors.New("invalid version or revision")
+	}
+
+	dirPath := s.resolve(filepath.Clean(folderName))
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		return errors.New("folder does not exist: " + folderName)
+	}
+	dirPath = filepath.Join(dirPath, version.Version.Original())
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		//#nosec G301
+		if err = os.Mkdir(dirPath, 0755); err != nil {
+			return err
+		}
+	}
+
+	var err error
+	if err = writeMigrationFile(dirPath, migrationName, "up", version.Revision, isUpDown, upType); err != nil {
+		return err
+	}
+
+	if isUpDown {
+		err = writeMigrationFile(dirPath, migrationName, "down", version.Revision, isUpDown, downType)
+	}
+
+	return err
+}
+
+func writeMigrationFile(path, migrationName, direction string, revision int64, isUpDown bool, fileType FileType) error {
+	prefix, suffix, fileContent := "", ".cypher", "return 1;\n"
+	if isUpDown {
+		prefix = direction + "_"
+	}
+
+	if fileType == Command {
+		suffix = ".run"
+		fileContent = "exit\n"
+	}
+
+	fullPath := filepath.Join(path, fmt.Sprintf("%d_%s%s%s", revision, prefix, migrationName, suffix))
+	return os.WriteFile(fullPath, []byte(fileContent), 0644) //#nosec G306
+}
+
 func (mf *MigrationFile) parseFileName(match, subExpNames []string) error {
 	var err error
 	for i, subExp := range subExpNames {

@@ -74,8 +74,13 @@ func (p *Planner) Plan(
 
 	localFolders.SortByVersion() // Sort by version first, so we iterate from oldest to newest
 
-	if len(localFolders) > 0 &&
-		targetVersion != nil && targetVersion.Version != nil &&
+	// This causes troubles later in the code. Just set to nil for easier checks deeper in the code.
+	// If semver version is not set, target version is invalid anyway.
+	if targetVersion != nil && targetVersion.Version == nil {
+		targetVersion = nil
+	}
+
+	if len(localFolders) > 0 && targetVersion != nil &&
 		localFolders[len(localFolders)-1].Version.LessThan(targetVersion.Version) {
 		return fmt.Errorf("specified target %s version does not exist", targetVersion.Version.String())
 	}

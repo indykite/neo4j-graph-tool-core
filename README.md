@@ -1,13 +1,29 @@
 # Neo4j Graph Tool Core
 
-This repository contains the driver code for the Neo4j Graph Tool. This Tool Core offers the following features:
+This repository contains the driver code for the [Neo4j Graph Tool](https://github.com/indykite/neo4j-graph-tool).
+Refer to that boilerplate to build your own Graph Tool for development with Neo4j.
 
-- Replaces the Neo4j Docker Image entrypoint.
-- Exposes a HTTP server, enables basic operations that can be carried on the Neo4j database.
+## Developing with Core
+
+The Core offers the following features:
+
+- Configuration with ENV vars or one of many file formats. We are using [Go Viper library](https://github.com/spf13/viper#why-viper).
+- Replacement for the Neo4j Docker Image entrypoint.
+- Exposes a HTTP server, enables basic operations that can be executed on the Neo4j instance running inside Docker container.
 - Data migrations are executed with Cypher scripts, using the Cypher shell command-line interface.
 - Semantic Versioning is used when versioning the scripts.
-- Command ```pre-commit run -a``` runs all tests.
-- Command ```golangci-lint run``` only runs test in the current folder.
+
+## Contribution
+
+Just open PR and don't forget to run
+
+- Command ```pre-commit run -a``` runs all tests. (Requires [pre-commit](https://pre-commit.com/#install) to be installed)
+- Command ```make lint``` only runs test in the current folder.
+- Command ```make test``` for test execution.
+
+## Usage
+
+For real usage look into [Neo4j Graph Tool](https://github.com/indykite/neo4j-graph-tool).
 
 ## Configuration
 

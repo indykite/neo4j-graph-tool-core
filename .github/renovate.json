@@ -1,0 +1,17 @@
+{
+  "extends": [
+    "config:base",
+    "schedule:weekly",
+    ":disableDependencyDashboard"
+  ],
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "chore(deps): ",
+  "commitMessageAction": "update",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths",
+    "gomodMassage"
+  ],
+  "groupName": "everything",
+  "ignoreDeps": []
+}

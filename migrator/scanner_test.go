@@ -15,6 +15,8 @@
 package migrator_test
 
 import (
+	"os"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/goccy/go-json"
 
@@ -134,11 +136,10 @@ var _ = Describe("Scanner Errors", func() {
 })
 
 var _ = Describe("GraphVersion", func() {
-	var v100, v110, v200 *semver.Version
+	var v110, v200 *semver.Version
 	var dbModel migrator.DatabaseModel
 
 	BeforeEach(func() {
-		v100 = semver.MustParse("1.0.0")
 		v110 = semver.MustParse("1.1.0")
 		v200 = semver.MustParse("2.0.0")
 
@@ -483,5 +484,115 @@ var _ = Describe("Scanner", func() {
 				Snapshots: map[migrator.Batch]*migrator.MigrationFile{},
 			},
 		))
+	})
+})
+
+var _ = Describe("Writing migrations", func() {
+	var scanner *migrator.Scanner
+	const baseFolder = "testdata/import"
+
+	BeforeEach(func() {
+		plannerCfg := &config.Config{Planner: &config.Planner{
+			BaseFolder: "import",
+			SchemaFolder: &config.SchemaFolder{
+				FolderName:    "schema",
+				MigrationType: config.DefaultSchemaMigrationType,
+			},
+			AllowedCommands: map[string]string{"graph-tool": "/app/graph-tool"},
+			Folders: map[string]*config.FolderDetail{
+				"data":      {MigrationType: config.DefaultFolderMigrationType, NodeLabels: []string{"DataVersion"}},
+				"not-exist": {MigrationType: "up_down"},
+			},
+		}}
+		err := plannerCfg.Normalize()
+		Expect(err).To(Succeed())
+
+		p, err := migrator.NewPlanner(plannerCfg)
+		Expect(err).To(Succeed())
+
+		scanner, err = p.NewScanner(baseFolder)
+		Expect(err).To(Succeed())
+	})
+
+	DescribeTable("Error cases",
+		func(folderName string, version *migrator.TargetVersion, expectedError OmegaMatcher) {
+			err := scanner.GenerateMigrationFiles(folderName, version, "some_name", migrator.Cypher, migrator.Cypher)
+			Expect(err).To(expectedError)
+		},
+		Entry("non existing folder", "cc", nil, MatchError("folder does not exist: cc")),
+		Entry("nil version", "schema", nil, MatchError("invalid version or revision")),
+		Entry("empty version", "schema", &migrator.TargetVersion{}, MatchError("invalid version or revision")),
+		Entry("zero revision", "schema",
+			&migrator.TargetVersion{Version: v100}, MatchError("invalid version or revision")),
+		Entry("not folder in filesystem", "not-exist",
+			&migrator.TargetVersion{Version: v101, Revision: 1},
+			MatchError("folder does not exist: not-exist")),
+	)
+
+	It("Write up and down files into existing folder", func() {
+		expectedUpFile := baseFolder + "/schema/v1.0.2/8050_up_my-new-migration.cypher"
+		expectedDownFile := baseFolder + "/schema/v1.0.2/8050_down_my-new-migration.run"
+		notExpectedChangeFile := baseFolder + "/schema/v1.0.2/8050_my-new-migration.run"
+
+		DeferCleanup(func() error {
+			err1 := os.Remove(expectedUpFile)
+			err2 := os.Remove(expectedDownFile)
+
+			if err1 != nil {
+				GinkgoWriter.Printf("failed to delete '%s': %s", expectedUpFile, err1.Error())
+			}
+			if err2 != nil {
+				GinkgoWriter.Printf("failed to delete '%s': %s", expectedDownFile, err2.Error())
+			}
+
+			// Return error to fail the It()
+			if err1 != nil {
+				return err1
+			}
+			return err2
+		})
+
+		err := scanner.GenerateMigrationFiles("schema", &migrator.TargetVersion{
+			Version:  v102,
+			Revision: 8050,
+		}, "my-new-migration", migrator.Cypher, migrator.Command)
+		Expect(err).To(Succeed())
+
+		val, err := os.ReadFile(expectedUpFile)
+		Expect(err).To(Succeed())
+		Expect(val).To(BeEquivalentTo("return 1;\n"))
+
+		val, err = os.ReadFile(expectedDownFile)
+		Expect(err).To(Succeed())
+		Expect(val).To(BeEquivalentTo("exit\n"))
+
+		_, err = os.Stat(notExpectedChangeFile)
+		Expect(os.IsNotExist(err)).To(BeTrue())
+	})
+
+	It("Write only up file but create new version folder", func() {
+		notExpectedUpFile := baseFolder + "/data/v1.0.2/8050_up_my-new-migration.cypher"
+		notExpectedDownFile := baseFolder + "/data/v1.0.2/8050_down_my-new-migration.run"
+		expectedChangeFile := baseFolder + "/data/v1.0.2/8050_my-new-migration.run"
+
+		DeferCleanup(func() error {
+			return os.RemoveAll(baseFolder + "/data/v1.0.2")
+		})
+
+		err := scanner.GenerateMigrationFiles("data", &migrator.TargetVersion{
+			Version:  v102,
+			Revision: 8050,
+		}, "my-new-migration", migrator.Command, migrator.Command)
+		Expect(err).To(Succeed())
+
+		val, err := os.ReadFile(expectedChangeFile)
+		Expect(err).To(Succeed())
+		Expect(val).To(BeEquivalentTo("exit\n"))
+
+		_, err = os.Stat(notExpectedUpFile)
+		Expect(os.IsNotExist(err)).To(BeTrue(), "file exists: "+notExpectedUpFile)
+
+		_, err = os.Stat(notExpectedDownFile)
+		Expect(os.IsNotExist(err)).To(BeTrue(), "file exists: "+notExpectedDownFile)
 	})
 })

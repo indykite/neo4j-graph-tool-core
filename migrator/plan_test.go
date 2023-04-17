@@ -27,10 +27,10 @@ import (
 )
 
 var (
-	v100, _ = semver.NewVersion("v1.0.0")
-	v101, _ = semver.NewVersion("v1.0.1")
-	v102, _ = semver.NewVersion("v1.0.2")
-	v103, _ = semver.NewVersion("v1.0.3")
+	v100 = semver.MustParse("v1.0.0")
+	v101 = semver.MustParse("v1.0.1")
+	v102 = semver.MustParse("v1.0.2")
+	v103 = semver.MustParse("v1.0.3")
 )
 
 type builderOperation struct {
