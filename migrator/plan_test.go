@@ -31,6 +31,7 @@ var (
 	v101 = semver.MustParse("v1.0.1")
 	v102 = semver.MustParse("v1.0.2")
 	v103 = semver.MustParse("v1.0.3")
+	v110 = semver.MustParse("v1.1.0")
 )
 
 type builderOperation struct {
@@ -92,7 +93,7 @@ var _ = Describe("Plan", func() {
 
 		vf, err = s.ScanFolders()
 		Expect(err).To(Succeed())
-		Expect(vf).To(HaveLen(3))
+		Expect(vf).To(HaveLen(4))
 	})
 
 	It("With no config", func() {
@@ -385,17 +386,23 @@ var _ = Describe("Plan", func() {
 				newBuilderOp("1.0.2", "snapshots", "testdata/import/snapshots/perf-seed_v1.0.2.cypher", 0, true),
 			},
 		),
+		Entry("Schema+data+perf uses snapshot as there is higher target version, but empty", "perf-seed",
+			&migrator.TargetVersion{Version: v103},
+			[]builderOperation{
+				newBuilderOp("1.0.2", "snapshots", "testdata/import/snapshots/perf-seed_v1.0.2.cypher", 0, true),
+			},
+		),
 	)
 
 	It("Out of supported", func() {
 		err := planner.Plan(
 			vf,
 			nil,
-			&migrator.TargetVersion{Version: v103},
+			&migrator.TargetVersion{Version: v110},
 			"perf-seed",
 			func(cf *migrator.MigrationFile, version *semver.Version) error {
 				return nil
 			})
-		Expect(err).To(MatchError("specified target 1.0.3 version does not exist"))
+		Expect(err).To(MatchError("specified target 1.1.0 version does not exist"))
 	})
 })

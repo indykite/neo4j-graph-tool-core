@@ -303,14 +303,15 @@ func (s *Scanner) scanSchemaAndExtraFolders() (LocalFolders, error) {
 		}
 
 		var err error
+		hasKeepVersionFile := false
 		if s.config.Planner.SchemaFolder.MigrationType == "up_down" {
-			v.SchemaFolder, err = s.scanUpDownTypeFolder(schemaFolderName, path)
+			v.SchemaFolder, hasKeepVersionFile, err = s.scanUpDownTypeFolder(schemaFolderName, path)
 		} else {
-			v.SchemaFolder, err = s.scanChangeTypeFolder(schemaFolderName, path)
+			v.SchemaFolder, hasKeepVersionFile, err = s.scanChangeTypeFolder(schemaFolderName, path)
 		}
 
 		// Don't need to check down, it is checked in scanUpDownTypeFolder method, or is empty for Change type.
-		if err != nil || len(v.SchemaFolder.Up) == 0 {
+		if err != nil || (len(v.SchemaFolder.Up) == 0 && !hasKeepVersionFile) {
 			return nil, err
 		}
 		return v, nil
@@ -330,9 +331,9 @@ func (s *Scanner) scanSchemaAndExtraFolders() (LocalFolders, error) {
 
 				var err error
 				if folderDetail.MigrationType == "up_down" {
-					v.ExtraFolders[folderName], err = s.scanUpDownTypeFolder(folderName, path)
+					v.ExtraFolders[folderName], _, err = s.scanUpDownTypeFolder(folderName, path)
 				} else {
-					v.ExtraFolders[folderName], err = s.scanChangeTypeFolder(folderName, path)
+					v.ExtraFolders[folderName], _, err = s.scanChangeTypeFolder(folderName, path)
 				}
 
 				return nil, err
@@ -468,48 +469,57 @@ func (s *Scanner) open(
 	return versions, nil
 }
 
-func (s *Scanner) scanChangeTypeFolder(folderName, dirPath string) (*MigrationScripts, error) {
-	scripts, err := s.scanFolder(folderName, dirPath, changeFilePattern)
-	return scripts, err
+func (s *Scanner) scanChangeTypeFolder(folderName, dirPath string) (*MigrationScripts, bool, error) {
+	return s.scanFolder(folderName, dirPath, changeFilePattern)
 }
 
-func (s *Scanner) scanUpDownTypeFolder(folderName, dirPath string) (*MigrationScripts, error) {
-	scripts, err := s.scanFolder(folderName, dirPath, upDownFilePattern)
+func (s *Scanner) scanUpDownTypeFolder(folderName, dirPath string) (*MigrationScripts, bool, error) {
+	scripts, hasKeepVersionFile, err := s.scanFolder(folderName, dirPath, upDownFilePattern)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	u, d := len(scripts.Up), len(scripts.Down)
 	if u != d {
-		return nil, fmt.Errorf("inconsistent state in '%s': found %d up and %d down script", dirPath, u, d)
+		return nil, false, fmt.Errorf("inconsistent state in '%s': found %d up and %d down script", dirPath, u, d)
 	}
 
 	for i, v := range scripts.Up {
 		if scripts.Down[d-i-1].Timestamp != v.Timestamp {
-			return nil, fmt.Errorf("inconsistent state: missing down part of '%s'", v.Path)
+			return nil, false, fmt.Errorf("inconsistent state: missing down part of '%s'", v.Path)
 		}
 	}
 
-	return scripts, err
+	return scripts, hasKeepVersionFile, err
 }
 
-func (s *Scanner) scanFolder(folderName, dirPath string, fileNamePattern *regexp.Regexp) (*MigrationScripts, error) {
+func (s *Scanner) scanFolder(
+	folderName, dirPath string,
+	fileNamePattern *regexp.Regexp,
+) (*MigrationScripts, bool, error) {
 	f, err := os.Open(filepath.Clean(dirPath))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	list, err := f.ReadDir(-1)
 	_ = f.Close()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	scripts := &MigrationScripts{}
+	hasKeepVersionFile := false
 	for _, info := range list {
-		if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
+		if info.IsDir() {
 			continue
 		}
 		fileName := info.Name()
+		if strings.HasPrefix(fileName, ".") {
+			if strings.ToLower(fileName) == ".keep_version_folder" {
+				hasKeepVersionFile = true
+			}
+			continue
+		}
 		mf := &MigrationFile{
 			FolderName: folderName,
 			Path:       path.Join(dirPath, fileName),
@@ -517,24 +527,26 @@ func (s *Scanner) scanFolder(folderName, dirPath string, fileNamePattern *regexp
 
 		match := fileNamePattern.FindStringSubmatch(fileName)
 		if len(match) != len(fileNamePattern.SubexpNames()) {
-			return nil, fmt.Errorf("file '%s' has invalid name", path.Join(dirPath, fileName))
+			return nil, false, fmt.Errorf("file '%s' has invalid name", path.Join(dirPath, fileName))
 		}
 
 		if err = mf.parseFileName(match, fileNamePattern.SubexpNames()); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if mf.IsDowngrade {
 			for _, v := range scripts.Down {
 				if v.Timestamp == mf.Timestamp {
-					return nil, fmt.Errorf("can't have two down commit match '%d' in folder '%s'", v.Timestamp, dirPath)
+					return nil, false,
+						fmt.Errorf("can't have two down commit match '%d' in folder '%s'", v.Timestamp, dirPath)
 				}
 			}
 			scripts.Down = append(scripts.Down, mf)
 		} else {
 			for _, v := range scripts.Up {
 				if v.Timestamp == mf.Timestamp {
-					return nil, fmt.Errorf("can't have two commit match '%d' in folder '%s'", v.Timestamp, dirPath)
+					return nil, false,
+						fmt.Errorf("can't have two commit match '%d' in folder '%s'", v.Timestamp, dirPath)
 				}
 			}
 			scripts.Up = append(scripts.Up, mf)
@@ -544,7 +556,7 @@ func (s *Scanner) scanFolder(folderName, dirPath string, fileNamePattern *regexp
 	// Listing all files from folder might not be in lexical order. To be sure sort all files before further process.
 	scripts.SortUpFiles()
 	scripts.SortDownFiles()
-	return scripts, nil
+	return scripts, hasKeepVersionFile, nil
 }
 
 // GenerateMigrationFiles creates empty files based on config and passed arguments.

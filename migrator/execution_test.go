@@ -140,7 +140,7 @@ var _ = Describe("Default Builder with testing data", func() {
 
 		localFolders, err = s.ScanFolders()
 		Expect(err).To(Succeed())
-		Expect(localFolders).To(HaveLen(3))
+		Expect(localFolders).To(HaveLen(4))
 	})
 
 	It("Fails on not allowed command", func() {

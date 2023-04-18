@@ -294,7 +294,7 @@ var _ = Describe("Scanner", func() {
 
 		vf, err := s.ScanFolders()
 		Expect(err).To(Succeed())
-		Expect(vf).To(HaveLen(3))
+		Expect(vf).To(HaveLen(4))
 
 		vf.SortByVersion()
 
