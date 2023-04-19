@@ -516,8 +516,9 @@ var _ = Describe("Writing migrations", func() {
 
 	DescribeTable("Error cases",
 		func(folderName string, version *migrator.TargetVersion, expectedError OmegaMatcher) {
-			err := scanner.GenerateMigrationFiles(folderName, version, "some_name", migrator.Cypher, migrator.Cypher)
+			paths, err := scanner.GenerateMigrationFiles(folderName, version, "name", migrator.Cypher, migrator.Cypher)
 			Expect(err).To(expectedError)
+			Expect(paths).To(BeNil())
 		},
 		Entry("non existing folder", "cc", nil, MatchError("folder does not exist: cc")),
 		Entry("nil version", "schema", nil, MatchError("invalid version or revision")),
@@ -552,11 +553,12 @@ var _ = Describe("Writing migrations", func() {
 			return err2
 		})
 
-		err := scanner.GenerateMigrationFiles("schema", &migrator.TargetVersion{
+		paths, err := scanner.GenerateMigrationFiles("schema", &migrator.TargetVersion{
 			Version:  v102,
 			Revision: 8050,
 		}, "my-new-migration", migrator.Cypher, migrator.Command)
 		Expect(err).To(Succeed())
+		Expect(paths).To(ConsistOf(expectedUpFile, expectedDownFile))
 
 		val, err := os.ReadFile(expectedUpFile)
 		Expect(err).To(Succeed())
@@ -579,11 +581,12 @@ var _ = Describe("Writing migrations", func() {
 			return os.RemoveAll(baseFolder + "/data/v1.0.2")
 		})
 
-		err := scanner.GenerateMigrationFiles("data", &migrator.TargetVersion{
+		paths, err := scanner.GenerateMigrationFiles("data", &migrator.TargetVersion{
 			Version:  v102,
 			Revision: 8050,
 		}, "my-new-migration", migrator.Command, migrator.Command)
 		Expect(err).To(Succeed())
+		Expect(paths).To(ConsistOf(expectedChangeFile))
 
 		val, err := os.ReadFile(expectedChangeFile)
 		Expect(err).To(Succeed())
