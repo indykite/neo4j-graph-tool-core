@@ -42,6 +42,8 @@ var _ = Describe("Version", func() {
 	type mockedRecord struct {
 		version string
 		files   []int64
+		// file shouldn't be float ever. But if someone updates it manually, it might get into this point.
+		floatFiles []float64
 	}
 
 	mockVersionCall := func(labels string, records ...*mockedRecord) {
@@ -57,6 +59,9 @@ var _ = Describe("Version", func() {
 				if r != nil {
 					var files []interface{}
 					for _, f := range r.files {
+						files = append(files, f)
+					}
+					for _, f := range r.floatFiles {
 						files = append(files, f)
 					}
 					record = &db.Record{
@@ -191,7 +196,7 @@ var _ = Describe("Version", func() {
 			})
 
 		dbm, err := p.Version(driver)
-		Expect(err).To(MatchError("invalid file number 'hello' from the response"))
+		Expect(err).To(MatchError("file number 'hello' is of type string, expect int64"))
 		Expect(dbm).To(BeNil())
 	})
 
@@ -199,7 +204,7 @@ var _ = Describe("Version", func() {
 		mockVersionCall(":MySchema:ExtraSchemaLabel",
 			&mockedRecord{version: "1.0.0", files: []int64{1100, 1500, 2400}},
 			&mockedRecord{version: "1.1.0", files: []int64{1800}},
-			&mockedRecord{version: "2.0.0", files: []int64{2300, 2800}},
+			&mockedRecord{version: "2.0.0", floatFiles: []float64{2300, 2800}},
 			nil,
 		)
 		mockVersionCall(":DataVersion",

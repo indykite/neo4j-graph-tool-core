@@ -104,12 +104,14 @@ func queryVersion(session neo4j.Session, cypher string) ([]DatabaseGraphVersion,
 					// files = make([]int64, len(rawFiles))
 					files = make(map[int64]bool)
 					for _, v := range rawFiles {
-						fileTime, ok := v.(int64)
-						if !ok {
-							return nil, fmt.Errorf("invalid file number '%v' from the response", v)
+						switch fileTime := v.(type) {
+						case int64:
+							files[fileTime] = true
+						case float64:
+							files[int64(fileTime)] = true
+						default:
+							return nil, fmt.Errorf("file number '%v' is of type %T, expect int64", v, v)
 						}
-						// files[i] = int64(fileTime)
-						files[fileTime] = true
 					}
 				}
 			}
