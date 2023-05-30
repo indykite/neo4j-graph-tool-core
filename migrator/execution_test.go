@@ -233,8 +233,6 @@ var _ = Describe("Default Builder with testing data", func() {
 		Expect(plan).To(Equal(string(expectedContent)))
 	})
 
-	// TODO: upgrade+downgrade in same plan
-
 	It("Create Downgrade plan", func() {
 		buf := new(migrator.ExecutionSteps)
 		err := p.Plan(localFolders, migrator.DatabaseModel{

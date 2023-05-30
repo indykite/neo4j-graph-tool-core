@@ -82,7 +82,6 @@ func queryVersion(session neo4j.Session, cypher string) ([]DatabaseGraphVersion,
 			}
 
 			var version *semver.Version
-			// var files []int64
 			var files map[int64]bool
 
 			for keyIndex, name := range record.Keys {
@@ -101,7 +100,6 @@ func queryVersion(session neo4j.Session, cypher string) ([]DatabaseGraphVersion,
 					if !ok {
 						return nil, errors.New("invalid version files from the response")
 					}
-					// files = make([]int64, len(rawFiles))
 					files = make(map[int64]bool)
 					for _, v := range rawFiles {
 						switch fileTime := v.(type) {
