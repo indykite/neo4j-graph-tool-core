@@ -46,7 +46,7 @@ var _ = Describe("Version", func() {
 		floatFiles []float64
 	}
 
-	mockVersionCall := func(labels string, records ...*mockedRecord) {
+	mockVersionCall := func(labels string, willFailOnParsingResponse bool, records ...*mockedRecord) {
 		transaction.EXPECT().Run(
 			"MATCH (sm"+labels+") WHERE sm.deleted_at IS NULL RETURN sm.version AS version, collect(sm.file) AS files", //nolint:lll
 			nil,
@@ -71,9 +71,14 @@ var _ = Describe("Version", func() {
 				}
 				mockResult.EXPECT().Record().Return(record)
 			}
+			mockResult.EXPECT().Consume().Return(nil, nil)
+
+			if willFailOnParsingResponse {
+				return mockResult, nil
+			}
+
 			mockResult.EXPECT().Next().Return(false)
 			mockResult.EXPECT().Err().Return(nil)
-			mockResult.EXPECT().Consume().Return(nil, nil)
 
 			return mockResult, nil
 		})
@@ -121,7 +126,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("Fail to fetch result", func() {
-		mockVersionCall(":MySchema:ExtraSchemaLabel",
+		mockVersionCall(":MySchema:ExtraSchemaLabel", false,
 			&mockedRecord{version: "1.0.0", files: []int64{1100, 1500, 2400}},
 			&mockedRecord{version: "1.1.0", files: []int64{1800}},
 			&mockedRecord{version: "2.0.0", files: []int64{2300, 2800}},
@@ -141,7 +146,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("Empty version", func() {
-		mockVersionCall(":MySchema:ExtraSchemaLabel",
+		mockVersionCall(":MySchema:ExtraSchemaLabel", true,
 			&mockedRecord{},
 		)
 
@@ -151,7 +156,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("Invalid version", func() {
-		mockVersionCall(":MySchema:ExtraSchemaLabel",
+		mockVersionCall(":MySchema:ExtraSchemaLabel", true,
 			&mockedRecord{version: "non-version"},
 		)
 
@@ -201,16 +206,16 @@ var _ = Describe("Version", func() {
 	})
 
 	It("Fetch all versions", func() {
-		mockVersionCall(":MySchema:ExtraSchemaLabel",
+		mockVersionCall(":MySchema:ExtraSchemaLabel", false,
 			&mockedRecord{version: "1.0.0", files: []int64{1100, 1500, 2400}},
 			&mockedRecord{version: "1.1.0", files: []int64{1800}},
 			&mockedRecord{version: "2.0.0", floatFiles: []float64{2300, 2800}},
 			nil,
 		)
-		mockVersionCall(":DataVersion",
+		mockVersionCall(":DataVersion", false,
 			&mockedRecord{version: "1.0.0", files: []int64{1250, 1800}},
 		)
-		mockVersionCall(":GraphToolMigration:PerfVersion",
+		mockVersionCall(":GraphToolMigration:PerfVersion", false,
 			&mockedRecord{version: "1.0.0", files: []int64{1300}},
 			&mockedRecord{version: "1.1.0", files: []int64{1950}},
 		)
