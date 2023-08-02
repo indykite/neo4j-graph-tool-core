@@ -25,8 +25,8 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	neo4j "github.com/neo4j/neo4j-go-driver/v4/neo4j"
-	db "github.com/neo4j/neo4j-go-driver/v4/neo4j/db"
+	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	db "github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
 )
 
 // MockDriver is a mock of Driver interface.

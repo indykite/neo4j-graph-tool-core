@@ -12,7 +12,7 @@ require (
 	github.com/goccy/go-json v0.10.2
 	github.com/golang/mock v1.6.0
 	github.com/golangci/golangci-lint v1.52.2
-	github.com/neo4j/neo4j-go-driver/v4 v4.4.7
+	github.com/neo4j/neo4j-go-driver/v5 v5.11.0
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.7
 	github.com/sirupsen/logrus v1.9.2

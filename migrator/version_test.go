@@ -19,8 +19,8 @@ import (
 	"errors"
 
 	gomock "github.com/golang/mock/gomock"
-	neo4j "github.com/neo4j/neo4j-go-driver/v4/neo4j"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j/db"
+	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
 
 	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/migrator"
