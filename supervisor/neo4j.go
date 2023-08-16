@@ -44,6 +44,7 @@ const (
 	Stopped  Neo4jState = "Stopped"
 	Failed   Neo4jState = "Failed"
 	Starting Neo4jState = "Starting"
+	Updating Neo4jState = "Updating Data"
 	Stopping Neo4jState = "Stopping"
 	Running  Neo4jState = "Running"
 )
@@ -351,17 +352,41 @@ func (w *Neo4jWrapper) RefreshData(
 	return nil
 }
 
+func (w *Neo4jWrapper) setUpdatingStateWhenRunning() error {
+	err := serviceSem.Acquire(w.context, 1)
+	if err != nil {
+		return err
+	}
+	defer serviceSem.Release(1)
+
+	if w.serviceState != Running {
+		return fmt.Errorf("cannot run import when service is '%s', must be running", w.serviceState)
+	}
+	w.serviceState = Updating
+	return nil
+}
+
+// update set Updating state in the beginning, but not at the end
 func (w *Neo4jWrapper) update(
 	targetVersion *migrator.TargetVersion,
 	dryRun, clean bool,
 	batchName migrator.Batch,
-) error {
-	state, err := w.State()
+) (err error) {
+	// This check must be done before setting up the defer below.
+	err = w.setUpdatingStateWhenRunning()
 	if err != nil {
 		return err
-	} else if state != Running {
-		return fmt.Errorf("cannot run import when service is '%s', must be running", w.serviceState)
 	}
+
+	// This defer will happen after return and thus have access to returned value.
+	// So program can act accordingly and even change it.
+	defer func() {
+		if err != nil {
+			_ = w.setState(Failed)
+		} else {
+			err = w.setState(Running)
+		}
+	}()
 
 	w.log.WithFields(logrus.Fields{
 		"clean":  clean,
@@ -419,10 +444,6 @@ func (w *Neo4jWrapper) update(
 		return nil
 	}
 
-	if err = w.setState(Starting); err != nil {
-		return err
-	}
-
 	user, pass, _ := w.getNeo4jBasicAuth()
 	// Set environment variables, because the values might come from config.
 	// Those variables are added automatically to starting utility. And cypher-shell accept it.
@@ -452,10 +473,7 @@ func (w *Neo4jWrapper) update(
 	}
 	w.log.Info("Import finished")
 
-	if stateErr := w.setState(Running); stateErr != nil {
-		return stateErr
-	}
-	return err
+	return nil
 }
 
 func (w *Neo4jWrapper) startUtility(wait bool, stdin io.Reader, args ...string) error {
