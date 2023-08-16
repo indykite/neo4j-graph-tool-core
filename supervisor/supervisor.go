@@ -63,7 +63,13 @@ func Start(cfg *config.Config) error {
 	log.Info("Starting supervisor")
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	neo4j := NewNeo4jWrapper(ctx, cfg, log.WithField(componentLogKey, "wrapper"))
+	defer cancelCtx()
+
+	var neo4j *Neo4jWrapper
+	neo4j, err = NewNeo4jWrapper(ctx, cfg, log.WithField(componentLogKey, "wrapper"))
+	if err != nil {
+		return err
+	}
 
 	s := &supervisor{
 		context:   ctx,
@@ -145,9 +151,16 @@ func (s *supervisor) stop() {
 
 	// When closing server, we don't really care about error
 	_ = s.httpServer.close()
+	var err error
+	if s.neo4j.driver != nil {
+		err = s.neo4j.driver.Close(s.context)
+		if err != nil {
+			s.log.Error(err)
+		}
+	}
 
 	// Send stop all to neo4j first, takes the longest time
-	err := s.neo4j.StopAll()
+	err = s.neo4j.StopAll()
 	if err != nil {
 		s.log.Error(err)
 	}

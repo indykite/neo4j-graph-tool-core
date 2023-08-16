@@ -15,19 +15,20 @@
 package supervisor
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
 
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/sirupsen/logrus"
 
 	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
-// Driver returns new Neo4j driver for custom Cypher calls with set up authorization based on config in Wrapper.
-func (w *Neo4jWrapper) Driver() (neo4j.Driver, error) {
-	return neo4j.NewDriver(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
+// ReadOnlySession returns new Neo4j session for custom Cypher calls.
+func (w *Neo4jWrapper) ReadOnlySession(ctx context.Context) neo4j.SessionWithContext {
+	return w.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 }
 
 func (w *Neo4jWrapper) getImportDir() string {

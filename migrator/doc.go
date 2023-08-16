@@ -14,5 +14,3 @@
 
 // Package migrator is responsible for planning and executing cypher migrations.
 package migrator
-
-//go:generate mockgen -copyright_file ../doc/LICENSE -package migrator_test -destination ./neo4j_mock_test.go github.com/neo4j/neo4j-go-driver/v4/neo4j Driver,Transaction,Result,ResultSummary
