@@ -15,11 +15,12 @@
 package migrator_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	gomock "github.com/golang/mock/gomock"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/onsi/gomega/types"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -56,42 +57,52 @@ func (m *matcherWrapper) String() string {
 }
 
 type MockSession struct {
-	tx neo4j.Transaction
+	neo4j.SessionWithContext
+	tx neo4j.ManagedTransaction
 }
 
-func (*MockSession) LastBookmark() string {
-	return ""
-}
-func (ms *MockSession) BeginTransaction(_ ...func(*neo4j.TransactionConfig)) (neo4j.Transaction, error) {
-	return ms.tx, nil
+func (*MockSession) LastBookmarks() neo4j.Bookmarks {
+	return nil
 }
 
-func (ms *MockSession) ReadTransaction(
-	work neo4j.TransactionWork,
+func (ms *MockSession) BeginTransaction(
+	_ context.Context,
+	_ ...func(*neo4j.TransactionConfig),
+) (neo4j.ExplicitTransaction, error) {
+	panic("BeginTransaction is not supported")
+}
+
+func (ms *MockSession) ExecuteRead(
+	ctx context.Context,
+	work neo4j.ManagedTransactionWork,
+	_ ...func(*neo4j.TransactionConfig),
+) (interface{}, error) {
+	return work(ms.tx)
+}
+func (ms *MockSession) ExecuteWrite(
+	ctx context.Context,
+	work neo4j.ManagedTransactionWork,
 	_ ...func(*neo4j.TransactionConfig),
 ) (interface{}, error) {
 	return work(ms.tx)
 }
 
-func (ms *MockSession) WriteTransaction(
-	_ neo4j.TransactionWork,
-	_ ...func(*neo4j.TransactionConfig),
-) (interface{}, error) {
-	panic("WriteTransactions is not supported")
-}
 func (ms *MockSession) Run(
+	_ context.Context,
 	_ string,
-	_ map[string]interface{},
-	_ ...func(*neo4j.TransactionConfig),
-) (neo4j.Result, error) {
+	_ map[string]any,
+	configurers ...func(*neo4j.TransactionConfig),
+) (neo4j.ResultWithContext, error) {
 	panic("Run is not supported")
 }
-func (ms *MockSession) Close() error {
+
+func (ms *MockSession) Close(_ context.Context) error {
 	return nil
 }
 
-var _ neo4j.Session = &MockSession{}
+var _ neo4j.SessionWithContext = &MockSession{}
 
-func Neo4jSession(tx neo4j.Transaction) neo4j.Session {
-	return &MockSession{tx: tx}
-}
+// func Neo4jSession(tx test.ExplicitTransaction) test.SessionWithContext {
+
+// 	return &MockSession{tx: tx}
+// }

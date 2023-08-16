@@ -168,13 +168,9 @@ func (s *httpServer) refreshDataHandler(clean bool) func(*gin.Context) {
 func (s *httpServer) versionHandler(c *gin.Context) {
 	// config is validated in supervisor
 	p, _ := migrator.NewPlanner(s.neo4j.cfg)
-	driver, err := s.neo4j.Driver()
-	if err != nil {
-		s.sendError(c, err)
-		return
-	}
-	defer func() { _ = driver.Close() }()
-	model, err := p.Version(driver)
+	session := s.neo4j.ReadOnlySession(c.Request.Context())
+	defer func() { _ = session.Close(c.Request.Context()) }()
+	model, err := p.Version(c.Request.Context(), session)
 	if err != nil {
 		s.sendError(c, err)
 		return

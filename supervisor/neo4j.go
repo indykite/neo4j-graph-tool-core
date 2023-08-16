@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 
@@ -60,6 +60,7 @@ var (
 
 // Neo4jWrapper wraps command and helper functions to operate with Neo4j server together with utilities.
 type Neo4jWrapper struct {
+	driver  neo4j.DriverWithContext
 	context context.Context
 	cfg     *config.Config
 
@@ -70,14 +71,18 @@ type Neo4jWrapper struct {
 }
 
 // NewNeo4jWrapper creates wrapper for handling Neo4j and utilities.
-func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry) *Neo4jWrapper {
-	return &Neo4jWrapper{
+func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry) (*Neo4jWrapper, error) {
+	w := &Neo4jWrapper{
 		context:      ctx,
 		cfg:          cfg,
 		serviceState: Stopped,
 		utilsCmd:     map[string]*TSCmd{},
 		log:          log,
 	}
+	var err error
+	w.driver, err = neo4j.NewDriverWithContext(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
+
+	return w, err
 }
 
 // State returns the current service state.
@@ -294,10 +299,6 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 		ticker := time.NewTicker(boltCheckSec * time.Second)
 		connected := false
 		w.log.Trace("Starting Bolt checking loop")
-		dr, err := neo4j.NewDriver(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
-		if err != nil {
-			return err
-		}
 	outerLoop:
 		for i := 0; ; i++ {
 			select {
@@ -309,7 +310,7 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 				if i > (boltCheckQuitAfterSec / boltCheckSec) {
 					break outerLoop
 				}
-				if err := dr.VerifyConnectivity(); err == nil {
+				if err := w.driver.VerifyConnectivity(w.context); err == nil {
 					connected = true
 					break outerLoop
 				}
@@ -366,7 +367,7 @@ func (w *Neo4jWrapper) setUpdatingStateWhenRunning() error {
 	return nil
 }
 
-// update set Updating state in the beginning, but not at the end
+// update set Updating state in the beginning, but not at the end.
 func (w *Neo4jWrapper) update(
 	targetVersion *migrator.TargetVersion,
 	dryRun, clean bool,
@@ -401,13 +402,10 @@ func (w *Neo4jWrapper) update(
 	var dbModel migrator.DatabaseModel
 	if !clean {
 		w.log.Trace("Connecting to DB to fetch current version")
-		var d neo4j.Driver
-		d, err = w.Driver()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = d.Close() }()
-		dbModel, err = p.Version(d)
+
+		session := w.ReadOnlySession(w.context)
+		defer func() { _ = session.Close(w.context) }()
+		dbModel, err = p.Version(w.context, session)
 		if err != nil {
 			return err
 		}

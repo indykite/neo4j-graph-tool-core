@@ -15,25 +15,31 @@
 package migrator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
+
+type Neo4jSession struct {
+	neo4j.SessionWithContext
+}
+
+var _ neo4j.SessionWithContext = &Neo4jSession{}
 
 //nolint:lll
 const versionCypher = `MATCH (sm:%s) WHERE sm.deleted_at IS NULL RETURN sm.version AS version, collect(sm.file) AS files`
 
 // Version retrieves version of current state of DB.
-func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
-	session := driver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+func (p *Planner) Version(ctx context.Context, session neo4j.SessionWithContext) (DatabaseModel, error) {
 	var err error
 
 	dbModel := make(DatabaseModel)
 	var dgv []DatabaseGraphVersion
-	dgv, err = queryVersion(session, fmt.Sprintf(
+	dgv, err = queryVersion(ctx, session, fmt.Sprintf(
 		versionCypher,
 		strings.Join(p.config.Planner.SchemaFolder.NodeLabels, ":"),
 	))
@@ -45,7 +51,7 @@ func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 	}
 
 	for folderName, folderDetail := range p.config.Planner.Folders {
-		dgv, err = queryVersion(session, fmt.Sprintf(
+		dgv, err = queryVersion(ctx, session, fmt.Sprintf(
 			versionCypher,
 			strings.Join(folderDetail.NodeLabels, ":"),
 		))
@@ -60,19 +66,23 @@ func (p *Planner) Version(driver neo4j.Driver) (DatabaseModel, error) {
 	return dbModel, nil
 }
 
-func queryVersion(session neo4j.Session, cypher string) ([]DatabaseGraphVersion, error) {
+func queryVersion(
+	ctx context.Context,
+	session neo4j.SessionWithContext,
+	cypher string,
+) ([]DatabaseGraphVersion, error) {
 	gs := make([]DatabaseGraphVersion, 0)
 
-	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		result, err := tx.Run(cypher, nil)
+	_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		result, err := tx.Run(ctx, cypher, nil)
 		if err != nil {
 			return nil, err
 		}
 		defer func() {
-			_, _ = result.Consume()
+			_, _ = result.Consume(ctx)
 		}()
 
-		for result.Next() {
+		for result.Next(ctx) {
 			if err = result.Err(); err != nil {
 				return nil, err
 			}

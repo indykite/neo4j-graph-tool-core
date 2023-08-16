@@ -12,7 +12,7 @@ gci:
 	gci write -s standard -s default -s "prefix(github.com/indykite/neo4j-graph-tool-core)" -s blank -s dot .
 
 generate_mocks:
-	cd migrator && go generate
+	cd test && go generate
 
 test:
 	go test -v -cpu 4 -covermode=count -coverpkg github.com/indykite/neo4j-graph-tool-core/... -coverprofile=coverage.out ./...
@@ -26,10 +26,10 @@ lint:
 upgrade:
 	go get -u all && go mod tidy
 
-download:
-	@echo Download go.mod dependencies
-	@go mod download
-
 install-tools: download
-	@echo Installing tools from tools.go
-	@go install $$(go list -f '{{range .Imports}}{{.}} {{end}}' tools.go)
+	@echo Installing tools
+	@go install github.com/daixiang0/gci@latest
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/golang/mock/mockgen@latest
+	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
+	@echo Installation completed

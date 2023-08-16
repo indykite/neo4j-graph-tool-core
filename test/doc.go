@@ -12,13 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build tools
-// +build tools
+// Package test specifies some Neo4j interfaces without unexported functions, so it is possible to mock it.
+// Only usage of that is to generate mocks and use it in tests.
+package test
 
-package tools
-
-import (
-	_ "github.com/daixiang0/gci"
-	_ "github.com/golang/mock/mockgen"
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
-)
+//go:generate mockgen -copyright_file ../doc/LICENSE -package test -destination ./neo4j_mock.go github.com/neo4j/neo4j-go-driver/v5/neo4j ExplicitTransaction,ResultWithContext
