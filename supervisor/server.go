@@ -178,11 +178,11 @@ func (s *httpServer) versionHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, model)
 }
 
-func (s *httpServer) error404(c *gin.Context) {
+func (*httpServer) error404(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "error": "Not found"})
 }
 
-func (s *httpServer) sendError(c *gin.Context, err error) {
+func (*httpServer) sendError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"status": http.StatusInternalServerError, "error": err.Error()})
 }
 

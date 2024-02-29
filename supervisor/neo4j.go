@@ -61,7 +61,7 @@ var (
 // Neo4jWrapper wraps command and helper functions to operate with Neo4j server together with utilities.
 type Neo4jWrapper struct {
 	driver  neo4j.DriverWithContext
-	context context.Context
+	context context.Context //nolint:containedctx // Context here is expected and required, it is root context.
 	cfg     *config.Config
 
 	serviceCmd   *TSCmd
@@ -105,9 +105,9 @@ func (w *Neo4jWrapper) setState(state Neo4jState) error {
 }
 
 // AllStates returns the current states of main service and all utilities.
-func (w *Neo4jWrapper) AllStates() map[string]interface{} {
+func (w *Neo4jWrapper) AllStates() map[string]any {
 	state, err := w.State()
-	m := map[string]interface{}{"neo4j": state}
+	m := map[string]any{"neo4j": state}
 	if err != nil {
 		m["neo4_state_err"] = err
 	}
@@ -168,10 +168,8 @@ func (w *Neo4jWrapper) Stop() error {
 		select {
 		case cancelWaitingChan <- os.Interrupt:
 			w.log.Trace("Interrupting signal was sent to Bolt opening checks")
-			break
 		default:
 			w.log.Warn("Interrupting signal was sent to Bolt opening checks - channel is full")
-			break
 		}
 	}
 	w.log.Trace("Interrupting signal sent")
@@ -242,7 +240,7 @@ func (w *Neo4jWrapper) Wait() error {
 	if err := serviceSem.Acquire(w.context, 1); err != nil {
 		return err
 	}
-	serviceCmd := w.serviceCmd // nolint:ifshort
+	serviceCmd := w.serviceCmd
 	serviceSem.Release(1)
 
 	if serviceCmd != nil {
@@ -290,7 +288,7 @@ func (w *Neo4jWrapper) WaitForNeo4j() (err error) {
 	isStarting := state == Starting
 
 	cancelled := false
-	if isStarting {
+	if isStarting { //nolint:nestif // TODO fix complexity
 		if err := serviceSem.Acquire(w.context, 1); err != nil {
 			return err
 		}
@@ -348,7 +346,7 @@ func (w *Neo4jWrapper) RefreshData(
 ) error {
 	err := w.update(targetVersion, dryRun, clean, batchName)
 	if err != nil {
-		return fmt.Errorf("importing data failed: %v", err)
+		return fmt.Errorf("importing data failed: %w", err)
 	}
 	return nil
 }

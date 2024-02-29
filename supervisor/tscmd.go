@@ -37,7 +37,7 @@ type errorWrap struct {
 type TSCmd struct {
 	errWrap *errorWrap
 	exec.Cmd
-	sync.Mutex
+	mu sync.Mutex
 }
 
 // WaitTS (Wait Thread Safe) will wait until command stops. This can be called multiple times with same result.
@@ -45,8 +45,8 @@ type TSCmd struct {
 // Original Wait() on original os/exec.Cmd when called multiple times can return different results,
 // depends on which lifecycle of command the Wait() is called.
 func (c *TSCmd) WaitTS() error {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.errWrap == nil {
 		c.errWrap = &errorWrap{
 			err: c.Wait(),

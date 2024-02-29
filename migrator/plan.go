@@ -36,12 +36,12 @@ type (
 )
 
 // NewPlanner creates Planner instance and returns error if provided config is not valid.
-func NewPlanner(config *config.Config) (*Planner, error) {
-	if err := config.Validate(); err != nil {
+func NewPlanner(cfg *config.Config) (*Planner, error) {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	return &Planner{
-		config: config,
+		config: cfg,
 	}, nil
 }
 
@@ -193,7 +193,7 @@ func (p *Planner) planFolder(
 	return filesToRun
 }
 
-func (p *Planner) planUpgrade(
+func (*Planner) planUpgrade(
 	folderScripts *MigrationScripts,
 	executedFiles map[int64]bool,
 	targetCommit int64,
@@ -214,7 +214,7 @@ func (p *Planner) planUpgrade(
 	return filesToRun
 }
 
-func (p *Planner) planDowngrade(
+func (*Planner) planDowngrade(
 	folderScripts *MigrationScripts,
 	executedFiles map[int64]bool,
 	targetCommit int64,

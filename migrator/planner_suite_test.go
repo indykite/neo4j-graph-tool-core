@@ -16,10 +16,9 @@ package migrator_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/onsi/gomega/types"
 
@@ -36,24 +35,24 @@ type matcherWrapper struct {
 	matcher types.GomegaMatcher
 	// This is used to save variable between calls to Matches and String in case of error
 	// to be able to print better messages on failure
-	actual interface{}
+	actual any
 }
 
 func WrapMatcher(matcher types.GomegaMatcher) gomock.Matcher {
 	return &matcherWrapper{matcher: matcher}
 }
 
-func (m *matcherWrapper) Matches(x interface{}) (ok bool) {
+func (m *matcherWrapper) Matches(x any) (ok bool) {
 	m.actual = x
 	var err error
 	if ok, err = m.matcher.Match(x); err != nil {
 		ok = false
 	}
-	return
+	return ok
 }
 
 func (m *matcherWrapper) String() string {
-	return fmt.Sprintf("Wrapped Gomega fail message: %s", m.matcher.FailureMessage(m.actual))
+	return "Wrapped Gomega fail message: " + m.matcher.FailureMessage(m.actual)
 }
 
 type MockSession struct {
@@ -65,7 +64,7 @@ func (*MockSession) LastBookmarks() neo4j.Bookmarks {
 	return nil
 }
 
-func (ms *MockSession) BeginTransaction(
+func (*MockSession) BeginTransaction(
 	_ context.Context,
 	_ ...func(*neo4j.TransactionConfig),
 ) (neo4j.ExplicitTransaction, error) {
@@ -73,30 +72,30 @@ func (ms *MockSession) BeginTransaction(
 }
 
 func (ms *MockSession) ExecuteRead(
-	ctx context.Context,
+	_ context.Context,
 	work neo4j.ManagedTransactionWork,
 	_ ...func(*neo4j.TransactionConfig),
-) (interface{}, error) {
+) (any, error) {
 	return work(ms.tx)
 }
 func (ms *MockSession) ExecuteWrite(
-	ctx context.Context,
+	_ context.Context,
 	work neo4j.ManagedTransactionWork,
 	_ ...func(*neo4j.TransactionConfig),
-) (interface{}, error) {
+) (any, error) {
 	return work(ms.tx)
 }
 
-func (ms *MockSession) Run(
+func (*MockSession) Run(
 	_ context.Context,
 	_ string,
 	_ map[string]any,
-	configurers ...func(*neo4j.TransactionConfig),
+	_ ...func(*neo4j.TransactionConfig),
 ) (neo4j.ResultWithContext, error) {
 	panic("Run is not supported")
 }
 
-func (ms *MockSession) Close(_ context.Context) error {
+func (*MockSession) Close(_ context.Context) error {
 	return nil
 }
 

@@ -141,7 +141,7 @@ func (p *Planner) CreateBuilder(steps *ExecutionSteps, abs bool) Builder {
 			(&TargetVersion{Version: version, Revision: cf.Timestamp}).String(),
 		))
 
-		if cf.FileType == Command {
+		if cf.FileType == Command { //nolint:nestif // TODO handle complexity
 			if err := p.addCommand(steps, cf); err != nil {
 				return err
 			}
@@ -218,7 +218,7 @@ func (p *Planner) addCommand(steps *ExecutionSteps, cf *MigrationFile) error {
 	newCommands := 0
 	for _, l := range lines {
 		l = strings.TrimSpace(l)
-		if len(l) == 0 || strings.HasPrefix(l, "//") || strings.HasPrefix(l, "#") {
+		if l == "" || strings.HasPrefix(l, "//") || strings.HasPrefix(l, "#") {
 			continue
 		}
 

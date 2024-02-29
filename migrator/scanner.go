@@ -94,7 +94,7 @@ const (
 )
 
 var (
-	upDownFilePattern   = regexp.MustCompile(`(?i)^(?P<commit>\d+)_(?P<direction>up|down)_(?P<name>\w+)\.(?P<type>cypher|run)$`) // nolint:lll
+	upDownFilePattern   = regexp.MustCompile(`(?i)^(?P<commit>\d+)_(?P<direction>up|down)_(?P<name>\w+)\.(?P<type>cypher|run)$`) //nolint:lll
 	changeFilePattern   = regexp.MustCompile(`(?i)^(?P<commit>\d+)_(?P<name>\w+)\.(?P<type>cypher|run)$`)
 	snapshotFilePattern = regexp.MustCompile(`^(.*)_(v[0-9.]+)\.(cypher|run)$`)
 
@@ -138,7 +138,7 @@ func (dbm DatabaseModel) toJSON(limitFiles int) string {
 
 			startAt := 0
 			if executedCnt >= limitFiles {
-				builder.WriteString(fmt.Sprintf(`"... %d more"`, executedCnt-limitFiles))
+				fmt.Fprintf(builder, `"... %d more"`, executedCnt-limitFiles)
 				startAt = executedCnt - limitFiles
 			}
 
@@ -247,7 +247,7 @@ func (a *TargetVersion) Set(v string) error {
 }
 
 // Type returns type name, so it can be used with flag package.
-func (a *TargetVersion) Type() string {
+func (*TargetVersion) Type() string {
 	return "GraphVersion"
 }
 
@@ -303,7 +303,7 @@ func (s *Scanner) scanSchemaAndExtraFolders() (LocalFolders, error) {
 		}
 
 		var err error
-		hasKeepVersionFile := false
+		var hasKeepVersionFile bool
 		if s.config.Planner.SchemaFolder.MigrationType == "up_down" {
 			v.SchemaFolder, hasKeepVersionFile, err = s.scanUpDownTypeFolder(schemaFolderName, path)
 		} else {
@@ -421,7 +421,7 @@ func (s *Scanner) addSnapshotsTo(localFolders LocalFolders) error {
 
 func (s *Scanner) open(
 	folderName string,
-	op func(ver *semver.Version, path string) (*LocalVersionFolder, error),
+	op func(*semver.Version, string) (*LocalVersionFolder, error),
 ) (LocalFolders, error) {
 	dirPath := s.resolve(filepath.Clean(folderName))
 	f, err := os.Open(filepath.Clean(dirPath))
@@ -454,7 +454,7 @@ func (s *Scanner) open(
 		}
 		ver, err := semver.NewVersion(dn)
 		if err != nil {
-			return nil, fmt.Errorf("%v - %s", err, path.Join(dirPath, dn))
+			return nil, fmt.Errorf("%s - %s", err.Error(), path.Join(dirPath, dn))
 		}
 		// Scan files
 		v, err := op(ver, path.Join(dirPath, dn))
@@ -493,7 +493,7 @@ func (s *Scanner) scanUpDownTypeFolder(folderName, dirPath string) (*MigrationSc
 	return scripts, hasKeepVersionFile, err
 }
 
-func (s *Scanner) scanFolder(
+func (*Scanner) scanFolder(
 	folderName, dirPath string,
 	fileNamePattern *regexp.Regexp,
 ) (*MigrationScripts, bool, error) {
@@ -515,7 +515,7 @@ func (s *Scanner) scanFolder(
 		}
 		fileName := info.Name()
 		if strings.HasPrefix(fileName, ".") {
-			if strings.ToLower(fileName) == ".keep_version_folder" {
+			if strings.EqualFold(fileName, ".keep_version_folder") {
 				hasKeepVersionFile = true
 			}
 			continue
@@ -530,7 +530,7 @@ func (s *Scanner) scanFolder(
 			return nil, false, fmt.Errorf("file '%s' has invalid name", path.Join(dirPath, fileName))
 		}
 
-		if err = mf.parseFileName(match, fileNamePattern.SubexpNames()); err != nil {
+		if err := mf.parseFileName(match, fileNamePattern.SubexpNames()); err != nil {
 			return nil, false, err
 		}
 
@@ -566,7 +566,7 @@ func (s *Scanner) GenerateMigrationFiles(
 	migrationName string,
 	upType, downType FileType,
 ) ([]string, error) {
-	isUpDown := false
+	var isUpDown bool
 	if folderName == s.config.Planner.SchemaFolder.FolderName {
 		isUpDown = s.config.Planner.SchemaFolder.MigrationType == "up_down"
 	} else {
@@ -587,8 +587,8 @@ func (s *Scanner) GenerateMigrationFiles(
 	}
 	dirPath = filepath.Join(dirPath, version.Version.Original())
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		//#nosec G301
-		if err = os.Mkdir(dirPath, 0755); err != nil {
+		//nolint:gosec // #nosec G301 doesn't work here for some reason
+		if err := os.Mkdir(dirPath, 0o755); err != nil {
 			return nil, err
 		}
 	}
@@ -601,7 +601,7 @@ func (s *Scanner) GenerateMigrationFiles(
 	}
 
 	if isUpDown {
-		paths = append(paths, "")
+		paths = append(paths, "") //nolint:makezero // Here it is OK to append
 		paths[1], err = writeMigrationFile(dirPath, migrationName, "down", version.Revision, isUpDown, downType)
 	}
 
@@ -609,7 +609,7 @@ func (s *Scanner) GenerateMigrationFiles(
 }
 
 func writeMigrationFile(
-	path, migrationName, direction string,
+	filePath, migrationName, direction string,
 	revision int64,
 	isUpDown bool,
 	fileType FileType,
@@ -624,8 +624,8 @@ func writeMigrationFile(
 		fileContent = "exit\n"
 	}
 
-	fullPath := filepath.Join(path, fmt.Sprintf("%d_%s%s%s", revision, prefix, migrationName, suffix))
-	return fullPath, os.WriteFile(fullPath, []byte(fileContent), 0644) //#nosec G306
+	fullPath := filepath.Join(filePath, fmt.Sprintf("%d_%s%s%s", revision, prefix, migrationName, suffix))
+	return fullPath, os.WriteFile(fullPath, []byte(fileContent), 0o644) // #nosec G306
 }
 
 func (mf *MigrationFile) parseFileName(match, subExpNames []string) error {

@@ -61,7 +61,7 @@ func (m *MockExplicitTransaction) Close(arg0 context.Context) error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockExplicitTransactionMockRecorder) Close(arg0 interface{}) *gomock.Call {
+func (mr *MockExplicitTransactionMockRecorder) Close(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockExplicitTransaction)(nil).Close), arg0)
 }
@@ -75,7 +75,7 @@ func (m *MockExplicitTransaction) Commit(arg0 context.Context) error {
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockExplicitTransactionMockRecorder) Commit(arg0 interface{}) *gomock.Call {
+func (mr *MockExplicitTransactionMockRecorder) Commit(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockExplicitTransaction)(nil).Commit), arg0)
 }
@@ -89,13 +89,13 @@ func (m *MockExplicitTransaction) Rollback(arg0 context.Context) error {
 }
 
 // Rollback indicates an expected call of Rollback.
-func (mr *MockExplicitTransactionMockRecorder) Rollback(arg0 interface{}) *gomock.Call {
+func (mr *MockExplicitTransactionMockRecorder) Rollback(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rollback", reflect.TypeOf((*MockExplicitTransaction)(nil).Rollback), arg0)
 }
 
 // Run mocks base method.
-func (m *MockExplicitTransaction) Run(arg0 context.Context, arg1 string, arg2 map[string]interface{}) (neo4j.ResultWithContext, error) {
+func (m *MockExplicitTransaction) Run(arg0 context.Context, arg1 string, arg2 map[string]any) (neo4j.ResultWithContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0, arg1, arg2)
 	ret0, _ := ret[0].(neo4j.ResultWithContext)
@@ -104,7 +104,7 @@ func (m *MockExplicitTransaction) Run(arg0 context.Context, arg1 string, arg2 ma
 }
 
 // Run indicates an expected call of Run.
-func (mr *MockExplicitTransactionMockRecorder) Run(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockExplicitTransactionMockRecorder) Run(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockExplicitTransaction)(nil).Run), arg0, arg1, arg2)
 }
@@ -157,7 +157,7 @@ func (m *MockResultWithContext) Collect(arg0 context.Context) ([]*db.Record, err
 }
 
 // Collect indicates an expected call of Collect.
-func (mr *MockResultWithContextMockRecorder) Collect(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) Collect(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Collect", reflect.TypeOf((*MockResultWithContext)(nil).Collect), arg0)
 }
@@ -172,7 +172,7 @@ func (m *MockResultWithContext) Consume(arg0 context.Context) (neo4j.ResultSumma
 }
 
 // Consume indicates an expected call of Consume.
-func (mr *MockResultWithContextMockRecorder) Consume(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) Consume(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Consume", reflect.TypeOf((*MockResultWithContext)(nil).Consume), arg0)
 }
@@ -229,7 +229,7 @@ func (m *MockResultWithContext) Next(arg0 context.Context) bool {
 }
 
 // Next indicates an expected call of Next.
-func (mr *MockResultWithContextMockRecorder) Next(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) Next(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockResultWithContext)(nil).Next), arg0)
 }
@@ -243,7 +243,7 @@ func (m *MockResultWithContext) NextRecord(arg0 context.Context, arg1 **db.Recor
 }
 
 // NextRecord indicates an expected call of NextRecord.
-func (mr *MockResultWithContextMockRecorder) NextRecord(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) NextRecord(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextRecord", reflect.TypeOf((*MockResultWithContext)(nil).NextRecord), arg0, arg1)
 }
@@ -257,7 +257,7 @@ func (m *MockResultWithContext) Peek(arg0 context.Context) bool {
 }
 
 // Peek indicates an expected call of Peek.
-func (mr *MockResultWithContextMockRecorder) Peek(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) Peek(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Peek", reflect.TypeOf((*MockResultWithContext)(nil).Peek), arg0)
 }
@@ -271,7 +271,7 @@ func (m *MockResultWithContext) PeekRecord(arg0 context.Context, arg1 **db.Recor
 }
 
 // PeekRecord indicates an expected call of PeekRecord.
-func (mr *MockResultWithContextMockRecorder) PeekRecord(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) PeekRecord(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekRecord", reflect.TypeOf((*MockResultWithContext)(nil).PeekRecord), arg0, arg1)
 }
@@ -300,7 +300,7 @@ func (m *MockResultWithContext) Single(arg0 context.Context) (*db.Record, error)
 }
 
 // Single indicates an expected call of Single.
-func (mr *MockResultWithContextMockRecorder) Single(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) Single(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Single", reflect.TypeOf((*MockResultWithContext)(nil).Single), arg0)
 }
@@ -312,7 +312,7 @@ func (m *MockResultWithContext) buffer(arg0 context.Context) {
 }
 
 // buffer indicates an expected call of buffer.
-func (mr *MockResultWithContextMockRecorder) buffer(arg0 interface{}) *gomock.Call {
+func (mr *MockResultWithContextMockRecorder) buffer(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "buffer", reflect.TypeOf((*MockResultWithContext)(nil).buffer), arg0)
 }

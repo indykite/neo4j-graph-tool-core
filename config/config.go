@@ -103,7 +103,8 @@ func LoadFile(fileName string) (*Config, error) {
 		// If SetConfigFile is used, and config is not found, fs.PathError is returned, do not ignore this error.
 		// But if no config is found in ConfigPath with ConfigName, viper.ConfigFileNotFoundError is returned
 		// and we want to ignore that error, as config is not really mandatory for us.
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var viperErr viper.ConfigFileNotFoundError
+		if !errors.As(err, &viperErr) {
 			return nil, err
 		}
 	}
@@ -264,7 +265,7 @@ func (c *Config) validateFoldersAndBatches() error {
 	for folderName, folderDetail := range c.Planner.Folders {
 		switch folderName {
 		case "":
-			return fmt.Errorf("name of folder in Planner.Folders can't be an empty string")
+			return errors.New("name of folder in Planner.Folders can't be an empty string")
 		case c.Planner.SchemaFolder.FolderName:
 			return fmt.Errorf(
 				"folder '%s' is used as schema folder and cannot be used again in planner.folders", folderName)
@@ -288,7 +289,7 @@ func (c *Config) validateFoldersAndBatches() error {
 
 	for batchName, batchDetail := range c.Planner.Batches {
 		if batchName == "" {
-			return fmt.Errorf("name of batch in Planner.Batches can't be an empty string")
+			return errors.New("name of batch in Planner.Batches can't be an empty string")
 		}
 		if batchDetail == nil {
 			return fmt.Errorf("empty configuration for batch '%s'", batchName)

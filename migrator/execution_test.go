@@ -53,13 +53,13 @@ var _ = Describe("ExecutionSteps", func() {
 	It("AddCypher without parameters does nothing", func() {
 		ess := migrator.ExecutionSteps{}
 		ess.AddCypher()
-		Expect(ess).To(HaveLen(0))
+		Expect(ess).To(BeEmpty())
 	})
 
 	It("AddCommand with empty parameters does nothing", func() {
 		ess := migrator.ExecutionSteps{}
 		ess.AddCommand([]string{})
-		Expect(ess).To(HaveLen(0))
+		Expect(ess).To(BeEmpty())
 	})
 
 	It("AddCypher is always adding to previous buffer", func() {
@@ -190,7 +190,7 @@ var _ = Describe("Default Builder with testing data", func() {
 		buf := new(migrator.ExecutionSteps)
 		err = pp.Plan(localFolders, nil, nil, "schema", p.CreateBuilder(buf, false))
 		Expect(err).To(MatchError(
-			"no commands to run in file testdata/import_err_case01/schema/v0.0.1/100_up_empty.run, use 'exit' command to ignore file", // nolint:lll
+			"no commands to run in file testdata/import_err_case01/schema/v0.0.1/100_up_empty.run, use 'exit' command to ignore file", //nolint:lll
 		))
 	})
 
@@ -201,7 +201,7 @@ var _ = Describe("Default Builder with testing data", func() {
 
 		plan := buf.String()
 		Expect(plan).To(MatchRegexp(
-			"// Starting on folder snapshots - ver:1.0.0\n:source .*/migrator/testdata/import/snapshots/schema_v1.0.0.cypher;", // nolint:lll
+			"// Starting on folder snapshots - ver:1.0.0\n:source .*/migrator/testdata/import/snapshots/schema_v1.0.0.cypher;", //nolint:lll
 		))
 	})
 

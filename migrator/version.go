@@ -106,7 +106,7 @@ func queryVersion(
 						return nil, fmt.Errorf("invalid version '%s' from response", v)
 					}
 				case "files":
-					rawFiles, ok := record.Values[keyIndex].([]interface{})
+					rawFiles, ok := record.Values[keyIndex].([]any)
 					if !ok {
 						return nil, errors.New("invalid version files from the response")
 					}

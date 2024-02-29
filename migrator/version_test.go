@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
 
@@ -53,14 +53,14 @@ var _ = Describe("Version", func() {
 			gomock.Any(),
 			"MATCH (sm"+labels+") WHERE sm.deleted_at IS NULL RETURN sm.version AS version, collect(sm.file) AS files", //nolint:lll
 			nil,
-		).DoAndReturn(func(_, _, _ interface{}) (neo4j.ResultWithContext, error) {
+		).DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
 			for _, r := range records {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 
 				var record *db.Record
 				if r != nil {
-					var files []interface{}
+					var files []any
 					for _, f := range r.files {
 						files = append(files, f)
 					}
@@ -69,7 +69,7 @@ var _ = Describe("Version", func() {
 					}
 					record = &db.Record{
 						Keys:   []string{"version", "files"},
-						Values: []interface{}{r.version, files},
+						Values: []any{r.version, files},
 					}
 				}
 				mockResult.EXPECT().Record().Return(record)
@@ -138,7 +138,7 @@ var _ = Describe("Version", func() {
 
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ interface{}) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(errors.New("cannot fetch result"))
 				mockResult.EXPECT().Consume(gomock.Any()).Return(nil, nil)
@@ -172,12 +172,12 @@ var _ = Describe("Version", func() {
 	It("Invalid files", func() {
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ interface{}) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 				mockResult.EXPECT().Record().Return(&db.Record{
 					Keys:   []string{"files"},
-					Values: []interface{}{159},
+					Values: []any{159},
 				})
 				mockResult.EXPECT().Consume(gomock.Any()).Return(nil, nil)
 
@@ -192,12 +192,12 @@ var _ = Describe("Version", func() {
 	It("Invalid file number", func() {
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ interface{}) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 				mockResult.EXPECT().Record().Return(&db.Record{
 					Keys:   []string{"files"},
-					Values: []interface{}{[]interface{}{"hello"}},
+					Values: []any{[]any{"hello"}},
 				})
 				mockResult.EXPECT().Consume(gomock.Any()).Return(nil, nil)
 

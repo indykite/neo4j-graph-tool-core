@@ -30,7 +30,7 @@ import (
 )
 
 type supervisor struct {
-	context   context.Context
+	context   context.Context //nolint:containedctx // Context here is expected and required, it is root context
 	cancelCtx context.CancelFunc
 	cfg       *config.Config
 

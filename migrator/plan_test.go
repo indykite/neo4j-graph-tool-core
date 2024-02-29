@@ -108,7 +108,7 @@ var _ = Describe("Plan", func() {
 			nil,
 			&migrator.TargetVersion{Version: v101},
 			"super-duper-batch",
-			func(cf *migrator.MigrationFile, version *semver.Version) error {
+			func(*migrator.MigrationFile, *semver.Version) error {
 				return nil
 			})
 		Expect(err).To(MatchError("unknown batch name 'super-duper-batch'"))
@@ -120,7 +120,7 @@ var _ = Describe("Plan", func() {
 			nil,
 			&migrator.TargetVersion{Version: v101},
 			"schema",
-			func(cf *migrator.MigrationFile, version *semver.Version) error {
+			func(*migrator.MigrationFile, *semver.Version) error {
 				return errors.New("something went wrong")
 			})
 		Expect(err).To(MatchError("something went wrong"))
@@ -134,7 +134,7 @@ var _ = Describe("Plan", func() {
 			},
 			&migrator.TargetVersion{Version: v100, Revision: 100},
 			"schema",
-			func(cf *migrator.MigrationFile, version *semver.Version) error {
+			func(*migrator.MigrationFile, *semver.Version) error {
 				return errors.New("something went wrong again")
 			})
 		Expect(err).To(MatchError("something went wrong again"))
@@ -157,7 +157,7 @@ var _ = Describe("Plan", func() {
 			},
 			&migrator.TargetVersion{Version: v101},
 			"perf-seed",
-			func(cf *migrator.MigrationFile, version *semver.Version) error {
+			func(*migrator.MigrationFile, *semver.Version) error {
 				migrations++
 				return nil
 			})
@@ -400,7 +400,7 @@ var _ = Describe("Plan", func() {
 			nil,
 			&migrator.TargetVersion{Version: v110},
 			"perf-seed",
-			func(cf *migrator.MigrationFile, version *semver.Version) error {
+			func(*migrator.MigrationFile, *semver.Version) error {
 				return nil
 			})
 		Expect(err).To(MatchError("specified target 1.1.0 version does not exist"))
