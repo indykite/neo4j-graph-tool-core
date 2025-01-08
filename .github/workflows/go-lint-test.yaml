@@ -23,7 +23,7 @@ jobs:
               uses: golangci/golangci-lint-action@v6
               with:
                   # Required: the version of golangci-lint is required and must be specified without patch version.
-                  version: v1.56
+                  version: v1.63
 
                   # Optional: golangci-lint command line arguments.
                   # This contains hack to print out file path
@@ -46,7 +46,7 @@ jobs:
               run: make test
 
             - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v4
+              uses: codecov/codecov-action@v5
               with:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   files: ./coverage.out
