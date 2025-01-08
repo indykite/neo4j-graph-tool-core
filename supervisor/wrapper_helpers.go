@@ -47,7 +47,7 @@ func (w *Neo4jWrapper) getImportDir() string {
 
 // getNeo4jBasicAuth returns username, password and realm just like neo4j.BasicAuth() requires.
 //
-//nolint:unparam
+//nolint:unparam // Is prepared fo future use.
 func (w *Neo4jWrapper) getNeo4jBasicAuth() (username, password, realm string) {
 	auth := strings.SplitN(w.cfg.Supervisor.Neo4jAuth, "/", 2)
 	if len(auth) == 2 {

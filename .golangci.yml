@@ -18,15 +18,14 @@ linters:
         - bodyclose
         - containedctx
         - contextcheck
+        - copyloopvar
         - dogsled
         - dupword
         - durationcheck
         - errchkjson
         - errname
         - errorlint
-        - execinquery
         # - exhaustive # Should be used?
-        - exportloopref
         # - forbidigo # We use fmt.Printf to console sometimes
         - gci
         - ginkgolinter
@@ -40,6 +39,7 @@ linters:
         - gosmopolitan
         - grouper
         - inamedparam
+        - intrange
         - lll
         - loggercheck
         - makezero
@@ -91,7 +91,7 @@ linters-settings:
         checks: [all]
 
     govet:
-        check-shadowing: true
+        shadow: true
         enable-all: true
 
     gosec:
@@ -116,7 +116,7 @@ linters-settings:
         values:
             regexp:
                 # As long we decide which format of YEAR in copyright we want, add this hack
-                our_year: 202[3-4] # Just change to 202[3-4] or other when changed
+                our_year: 202[3-5] # Just change to 202[3-5] or other when changed
         template: |-
             Copyright (c) {{OUR_YEAR}} IndyKite
 
@@ -132,8 +132,16 @@ linters-settings:
             See the License for the specific language governing permissions and
             limitations under the License.
 
+    ginkgolinter:
+        forbid-focus-container: true
+
     nakedret:
         max-func-lines: 8 # Counting also declaration, not just body
+
+    nolintlint:
+        allow-no-explanation: [lll]
+        require-explanation: true
+        require-specific: true
 
     exhaustive:
         check:
@@ -156,7 +164,7 @@ linters-settings:
             - name: error-strings
             - name: errorf
             - name: exported
-              arguments: [checkPrivateReceivers]
+              arguments: [checkPublicInterface]
             - name: increment-decrement
             - name: indent-error-flow
             - name: package-comments

@@ -131,7 +131,7 @@ func (p *Planner) Plan(
 
 	planLength := len(plan)
 	// Do upgrade
-	for i := 0; i < planLength; i++ {
+	for i := range planLength {
 		plan[i].SortUpFiles()
 		currentVersion := plan[i].version
 		for _, mf := range plan[i].Up {
