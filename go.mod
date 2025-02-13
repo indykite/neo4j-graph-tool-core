@@ -2,22 +2,22 @@ module github.com/indykite/neo4j-graph-tool-core
 
 go 1.22.0
 
-toolchain go1.23.4
+toolchain go1.24.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/gin-gonic/gin v1.10.0
-	github.com/goccy/go-json v0.10.4
+	github.com/goccy/go-json v0.10.5
 	github.com/golang/mock v1.6.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/text v0.21.0
+	golang.org/x/sync v0.11.0
+	golang.org/x/text v0.22.0
 )
 
 require (
