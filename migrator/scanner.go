@@ -587,7 +587,6 @@ func (s *Scanner) GenerateMigrationFiles(
 	}
 	dirPath = filepath.Join(dirPath, version.Version.Original())
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		//nolint:gosec // #nosec G301 doesn't work here for some reason
 		if err := os.Mkdir(dirPath, 0o755); err != nil {
 			return nil, err
 		}

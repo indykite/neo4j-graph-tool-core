@@ -16,6 +16,7 @@ package supervisor
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ type errorWrap struct {
 // TSCmd is embedding os/exec.Cmd and adding WaitTS (wait thread safe) function.
 type TSCmd struct {
 	errWrap *errorWrap
-	exec.Cmd
+	*exec.Cmd
 	mu sync.Mutex
 }
 
@@ -63,7 +64,7 @@ func StartCmd(log *logrus.Entry, stdin io.Reader, args ...string) (cmd *TSCmd, e
 	log.Debug("Executing: ", args)
 	cmd = &TSCmd{
 		// #nosec G204
-		Cmd: *exec.Command(args[0], args[1:]...),
+		Cmd: exec.CommandContext(context.Background(), args[0], args[1:]...),
 	}
 	cmd.Stdin = os.Stdin
 	if stdin != nil {
