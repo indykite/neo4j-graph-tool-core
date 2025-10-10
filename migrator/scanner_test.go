@@ -98,7 +98,7 @@ var _ = Describe("Scanner Errors", func() {
 		Entry("Is file, not directory", "testdata/case04", "open: testdata/case04/schema is not a directory"),
 
 		Entry("Invalid semver name",
-			"testdata/case05", "Invalid Semantic Version - testdata/case05/schema/v-not-semver"),
+			"testdata/case05", "invalid semantic version - testdata/case05/schema/v-not-semver"),
 
 		Entry("More up files", "testdata/case06",
 			"inconsistent state in 'testdata/case06/schema/v1.0.1': found 1 up and 0 down script"),
@@ -125,7 +125,7 @@ var _ = Describe("Scanner Errors", func() {
 			"invalid snapshot name 'invalid_name.cypher'"),
 
 		Entry("Invalid snapshot version", "testdata/snapshot_case03",
-			"invalid snapshot version 'schema_v1.1.1.1.1.1.1.cypher': Invalid Semantic Version"),
+			"invalid snapshot version 'schema_v1.1.1.1.1.1.1.cypher': invalid semantic version"),
 
 		Entry("Invalid batch name", "testdata/snapshot_case04",
 			"unknown batch name 'my_snapshot' based on snapshot name 'my_snapshot_v1.0.0.cypher'"),
@@ -244,7 +244,7 @@ var _ = Describe("TargetVersion", func() {
 			// There is no easy way how to test semver.Version. Just convert to String.
 			Expect(ver.String()).To(valueMatcher)
 		},
-		Entry("invalid", "abc", MatchError("Invalid Semantic Version"), Equal("")),
+		Entry("invalid", "abc", MatchError("invalid semantic version"), Equal("")),
 		Entry("not numeric metadata", "1.2.3+beta1", MatchError("metadata are not numeric: 'beta1'"), Equal("")),
 		Entry("no metadata", "11.750.22", Succeed(), Equal("11.750.22")),
 		Entry("short metadata", "2.14.7+1", Succeed(), Equal("2.14.7+01")),
@@ -256,7 +256,7 @@ var _ = Describe("TargetVersion", func() {
 		Expect(gv.Set("1.0.0")).To(MatchError("object is not initialized"))
 
 		gv = &migrator.TargetVersion{}
-		Expect(gv.Set("bla")).To(MatchError("Invalid Semantic Version"))
+		Expect(gv.Set("bla")).To(MatchError("invalid semantic version"))
 
 		Expect(gv.Set("22.45.99+456")).To(Succeed())
 		Expect(gv.String()).To(Equal("22.45.99+456"))

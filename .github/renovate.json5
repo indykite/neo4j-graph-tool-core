@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    // org shared config - https://github.com/indykite/ops-common/blob/master/.github/renovate.json
+    "github>indykite/ops-common//.github/renovate.json",
+    "replacements:all",
+    "workarounds:all"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "dockerfile",
+    "gomod",
+    "pre-commit",
+    "custom.regex"
+  ],
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "chore(deps): ",
+  "commitMessageAction": "update",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths",
+    "gomodMassage"
+  ],
+  "groupName": "everything",
+  "ignorePaths": [
+    "docker-compose.yml", // consider enabling to keep 3rd-party ones updated, e.g. Redis
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/examples/**",
+    "**/testdata/**"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/\\.ya?ml/"
+      ],
+      "matchStrings": [
+        "(?<currentValue>\\S+) # renovate: datasource=(?<datasource>[a-z-]+?),depName=(?<depName>.+?)"
+      ],
+      "versioningTemplate": "semver",
+      "registryUrlTemplate": "https://github.com"
+    }
+  ]
+}
