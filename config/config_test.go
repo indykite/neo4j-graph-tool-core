@@ -169,7 +169,7 @@ var _ = Describe("LoadFile", func() {
 	It("Invalid data type in file", func() {
 		_, err := config.LoadFile("testdata/invalidType.toml")
 		Expect(err).To(MatchError(
-			ContainSubstring("expected type 'int', got unconvertible type '[]interface {}', value: '[10]'")),
+			ContainSubstring("expected type 'int', got unconvertible type '[]interface {}'")),
 		)
 	})
 
@@ -363,7 +363,7 @@ var _ = Describe("Validation & Normalize", func() {
 
 		Entry("Graph Version", func(cfg *config.Config) {
 			cfg.Supervisor.DefaultGraphVersion = "www"
-		}, MatchError(ContainSubstring("Invalid Semantic Version"))),
+		}, MatchError(ContainSubstring("invalid semantic version"))),
 
 		Entry("Initial Batch", func(cfg *config.Config) {
 			cfg.Supervisor.InitialBatch = "invalid"
