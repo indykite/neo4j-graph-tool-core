@@ -18,9 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
 	"github.com/onsi/gomega/types"
+	"go.uber.org/mock/gomock"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -56,7 +56,7 @@ func (m *matcherWrapper) String() string {
 }
 
 type MockSession struct {
-	neo4j.SessionWithContext
+	neo4j.Session
 	tx neo4j.ManagedTransaction
 }
 
@@ -91,7 +91,7 @@ func (*MockSession) Run(
 	_ string,
 	_ map[string]any,
 	_ ...func(*neo4j.TransactionConfig),
-) (neo4j.ResultWithContext, error) {
+) (neo4j.Result, error) {
 	panic("Run is not supported")
 }
 
@@ -99,7 +99,7 @@ func (*MockSession) Close(_ context.Context) error {
 	return nil
 }
 
-var _ neo4j.SessionWithContext = &MockSession{}
+var _ neo4j.Session = &MockSession{}
 
 // func Neo4jSession(tx test.ExplicitTransaction) test.SessionWithContext {
 

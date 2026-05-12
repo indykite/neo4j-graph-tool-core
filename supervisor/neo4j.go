@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 
@@ -60,7 +60,7 @@ var (
 
 // Neo4jWrapper wraps command and helper functions to operate with Neo4j server together with utilities.
 type Neo4jWrapper struct {
-	driver  neo4j.DriverWithContext
+	driver  neo4j.Driver
 	context context.Context //nolint:containedctx // Context here is expected and required, it is root context.
 	cfg     *config.Config
 
@@ -80,7 +80,7 @@ func NewNeo4jWrapper(ctx context.Context, cfg *config.Config, log *logrus.Entry)
 		log:          log,
 	}
 	var err error
-	w.driver, err = neo4j.NewDriverWithContext(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
+	w.driver, err = neo4j.NewDriver(boltAddr, neo4j.BasicAuth(w.getNeo4jBasicAuth()))
 
 	return w, err
 }

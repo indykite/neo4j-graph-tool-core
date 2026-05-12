@@ -16,4 +16,6 @@
 // Only usage of that is to generate mocks and use it in tests.
 package test
 
-//go:generate mockgen -copyright_file ../doc/LICENSE -package test -destination ./neo4j_mock.go github.com/neo4j/neo4j-go-driver/v5/neo4j ExplicitTransaction,ResultWithContext
+// When regenerated, make sure you add embed neo4j.Result into MockResult.
+// See https://github.com/uber-go/mock/issues/64
+//go:generate mockgen -copyright_file ../doc/LICENSE -package test -destination ./neo4j_mock.go github.com/neo4j/neo4j-go-driver/v6/neo4j ManagedTransaction,Result

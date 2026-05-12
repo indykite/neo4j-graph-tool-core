@@ -20,14 +20,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
 	"github.com/sirupsen/logrus"
 
 	"github.com/indykite/neo4j-graph-tool-core/migrator"
 )
 
 // ReadOnlySession returns new Neo4j session for custom Cypher calls.
-func (w *Neo4jWrapper) ReadOnlySession(ctx context.Context) neo4j.SessionWithContext {
+func (w *Neo4jWrapper) ReadOnlySession(ctx context.Context) neo4j.Session {
 	return w.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 }
 

@@ -19,9 +19,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/golang/mock/gomock"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j/db"
+	"go.uber.org/mock/gomock"
 
 	"github.com/indykite/neo4j-graph-tool-core/config"
 	"github.com/indykite/neo4j-graph-tool-core/migrator"
@@ -34,9 +34,9 @@ import (
 var _ = Describe("Version", func() {
 	var (
 		mockCtrl        *gomock.Controller
-		mockTransaction *test.MockExplicitTransaction
-		mockResult      *test.MockResultWithContext
-		session         neo4j.SessionWithContext
+		mockTransaction *test.MockManagedTransaction
+		mockResult      *test.MockResult
+		session         neo4j.Session
 
 		p *migrator.Planner
 	)
@@ -53,14 +53,14 @@ var _ = Describe("Version", func() {
 			gomock.Any(),
 			"MATCH (sm"+labels+") WHERE sm.deleted_at IS NULL RETURN sm.version AS version, collect(sm.file) AS files", //nolint:lll
 			nil,
-		).DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
+		).DoAndReturn(func(_, _, _ any) (neo4j.Result, error) {
 			for _, r := range records {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 
 				var record *db.Record
 				if r != nil {
-					var files []any
+					files := make([]any, 0, len(r.files)+len(r.floatFiles))
 					for _, f := range r.files {
 						files = append(files, f)
 					}
@@ -89,8 +89,8 @@ var _ = Describe("Version", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		mockTransaction = test.NewMockExplicitTransaction(mockCtrl)
-		mockResult = test.NewMockResultWithContext(mockCtrl)
+		mockTransaction = test.NewMockManagedTransaction(mockCtrl)
+		mockResult = test.NewMockResult(mockCtrl)
 		session = &MockSession{tx: mockTransaction}
 
 		// driver = test.NewMockDriverWithContext(mockCtrl)
@@ -138,7 +138,7 @@ var _ = Describe("Version", func() {
 
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.Result, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(errors.New("cannot fetch result"))
 				mockResult.EXPECT().Consume(gomock.Any()).Return(nil, nil)
@@ -172,7 +172,7 @@ var _ = Describe("Version", func() {
 	It("Invalid files", func() {
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.Result, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 				mockResult.EXPECT().Record().Return(&db.Record{
@@ -192,7 +192,7 @@ var _ = Describe("Version", func() {
 	It("Invalid file number", func() {
 		mockTransaction.EXPECT().
 			Run(gomock.Any(), gomock.Any(), nil).
-			DoAndReturn(func(_, _, _ any) (neo4j.ResultWithContext, error) {
+			DoAndReturn(func(_, _, _ any) (neo4j.Result, error) {
 				mockResult.EXPECT().Next(gomock.Any()).Return(true)
 				mockResult.EXPECT().Err().Return(nil)
 				mockResult.EXPECT().Record().Return(&db.Record{
