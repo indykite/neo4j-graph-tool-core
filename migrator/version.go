@@ -21,20 +21,18 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
 )
 
 type Neo4jSession struct {
-	neo4j.SessionWithContext
+	neo4j.Session
 }
-
-var _ neo4j.SessionWithContext = &Neo4jSession{}
 
 //nolint:lll
 const versionCypher = `MATCH (sm:%s) WHERE sm.deleted_at IS NULL RETURN sm.version AS version, collect(sm.file) AS files`
 
 // Version retrieves version of current state of DB.
-func (p *Planner) Version(ctx context.Context, session neo4j.SessionWithContext) (DatabaseModel, error) {
+func (p *Planner) Version(ctx context.Context, session neo4j.Session) (DatabaseModel, error) {
 	var err error
 
 	dbModel := make(DatabaseModel)
@@ -68,7 +66,7 @@ func (p *Planner) Version(ctx context.Context, session neo4j.SessionWithContext)
 
 func queryVersion(
 	ctx context.Context,
-	session neo4j.SessionWithContext,
+	session neo4j.Session,
 	cypher string,
 ) ([]DatabaseGraphVersion, error) {
 	gs := make([]DatabaseGraphVersion, 0)

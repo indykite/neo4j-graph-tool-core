@@ -29,7 +29,7 @@ upgrade:
 install-tools: download
 	@echo Installing tools
 	@go install github.com/daixiang0/gci@latest
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@go install github.com/golang/mock/mockgen@latest
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	@go install go.uber.org/mock/mockgen@latest
 	@go install github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installation completed
