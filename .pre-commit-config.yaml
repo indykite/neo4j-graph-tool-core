@@ -12,7 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+#
+# Prerequisites:
+#   ! keep the below line updated! It's parsed and used for dependency installation by shared GitHub Workflow
+#   brew install yamlfmt yamllint actionlint markdownlint-cli2 shellcheck shfmt checkov trivy go buf gci golangci-lint
+#
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 
