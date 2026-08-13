@@ -20,7 +20,7 @@ default_stages: [pre-commit, pre-push]
 # fail_fast: false
 repos:
     - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v6.0.0
+      rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
       hooks:
           - id: trailing-whitespace
           - id: end-of-file-fixer
@@ -36,12 +36,12 @@ repos:
             args: [--branch, master]
 
     - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt.git
-      rev: 0.2.3
+      rev: 8d1b9cadaf854cb25bb0b0f5870e1cc66a083d6b  # frozen: 0.2.3
       hooks:
           - id: yamlfmt
 
     - repo: https://github.com/detailyang/pre-commit-shell.git
-      rev: 1.0.5
+      rev: 062f0b028ae65827e04f91c1e6738cfcbe9b337f  # frozen: 1.0.5
       hooks:
           - id: shell-lint
 
@@ -52,6 +52,7 @@ repos:
             entry: make install-tools
             language: system
             pass_filenames: false
+            stages: [manual]
 
           - id: gci
             name: Fix imports and Format go code
@@ -72,6 +73,6 @@ repos:
             pass_filenames: false
 
     - repo: https://github.com/jumanjihouse/pre-commit-hooks.git
-      rev: 3.0.0
+      rev: 38980559e3a605691d6579f96222c30778e5a69e  # frozen: 3.0.0
       hooks:
           - id: markdownlint
