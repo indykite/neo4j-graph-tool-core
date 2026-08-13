@@ -45,7 +45,7 @@ repos:
           - id: yamlfmt
 
     - repo: https://github.com/detailyang/pre-commit-shell.git
-      rev: 062f0b028ae65827e04f91c1e6738cfcbe9b337f  # frozen: 1.0.5
+      rev: 062f0b028ae65827e04f91c1e6738cfcbe9b337f  # frozen: v1.0.6
       hooks:
           - id: shell-lint
 
